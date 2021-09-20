@@ -1,0 +1,598 @@
+# Andrew Black
+# andrewjblack0@gmail.com
+
+
+# ctrl-shift-w to close all View tabs
+
+# List out packages
+	packages = c("ggplot2",
+						"readxl",
+						 "readr",
+						 "tidyr",
+						 "UpSetR",
+						 "dplyr",
+						 "purrr",
+						 "stringr",
+						 "ComplexUpset",
+						 "apaTables",
+						 "sos",
+						 "imputeTS",
+						 "ggmap",
+						 "readtext",
+						 "expss",
+						 "ggsci",
+						 "tmaptools",
+						 "usmap",
+						 "knitr",
+						 "afex",
+						 "stringr",
+						 "ggthemes",
+						 "scales",
+						 "grid")
+
+
+	# Now load or install&load all
+		package.check <- lapply(
+		  packages,
+		  FUN = function(x) {
+		    if (!require(x, character.only = TRUE)) {
+		      install.packages(x, dependencies = TRUE)
+		      library(x, character.only = TRUE)
+		    }
+		  }
+		)
+
+# Set up colors for the colorblind
+	scale_colour_discrete <- scale_colour_colorblind
+
+# Navigate to the first file and open it
+	setwd("C:/Users/Andrew/Desktop/UCMR")
+
+# Get EPA data combined into one dataframe
+	# Open .txt files provided in UCMR3 zip folder from EPA
+		
+		# UCMR3 All occurrence data
+			UCMR3_allData <- read.table("UCMR3_All.txt", fill=TRUE, header=TRUE, quote="", sep="\t", encoding="UTF-8")
+			#View(UCMR3_allData)
+			unique(UCMR3_allData$State) # Wooooh, got all states and some territories!
+
+			UCMR3_allData <- UCMR3_allData[!with(UCMR3_allData,is.na(MRL)& is.na(AnalyticalResultValue)& is.na(Contaminant)),] # remove rows where MRL is NA AND AnalyticalResultValue is NA, because this is not even a ND, there is no contaminant test reported
+			
+			UCMR3_allData$PWSID_facilityID <- paste(UCMR3_allData$PWSID, UCMR3_allData$FacilityID, sep="")
+
+
+		# UCMR3 disinfectant use data
+			UCMR3_DT <- read.table("UCMR3_DT.txt", fill=TRUE, header=TRUE, quote="", sep="\t", encoding="UTF-8")
+			#View(UCMR3_DT)
+			# Remove the columns that are not needed, sample event code and collection date
+			UCMR3_DT <- UCMR3_DT[, c("PWSID", "FacilityID", "SamplePointID", "Disinfectant.Type")]
+			# Remove duplicate rows
+			UCMR3_DT <- unique(UCMR3_DT)
+			# verify that there are not any PWSIDs with different disinfectants listed
+			test_UCMR3_DT <- unique(UCMR3_DT$PWSID)
+			#View(test_UCMR3_DT) # got 4,204 unique PWSIDs, lets make sure that matches the unique values below. . 
+			UCMR3_DT <- UCMR3_DT[, c("PWSID", "FacilityID", "Disinfectant.Type")]
+			UCMR3_DT <- unique(UCMR3_DT)
+			#View(UCMR3_DT) # failed test: we get 6,304 rows, meaning some PWSIDs are repeated with different disinfectants
+			UCMR3_DT$PWSID_facilityID <- paste(UCMR3_DT$PWSID, UCMR3_DT$FacilityID, sep="")
+
+			# this means that we must match up the disinfectant data based on BOTH PWSID and FacilityID, because a given PWSID may have multiple facilities under it, and the state-assigned facility ID has been proven not-unique (so, a PWSID from Kansas and Florida may have the same facility number 771, under unique PWSIDs)
+			
+			UCMR3_disinf <- merge(UCMR3_allData, UCMR3_DT, by = "PWSID_facilityID")
+			#View(UCMR3_disinf)
+
+		# Get a nice list of the column names
+			dput(as.character(names(UCMR3_disinf)))
+
+	# Look at UCMR4 EPA data, get look up values for these PWSIDs treatment info
+		# Open .txt files provided in UCMR3 zip folder from EPA
+		UCMR4_HAA_AddtlDataElem <- read.delim("UCMR4_HAA_AddtlDataElem.txt")
+		#View(UCMR4_HAA_AddtlDataElem)
+
+		# make the column AdditionalDataElement into separate columns with Response below each
+			UCMR4_HAA_AddtlDataElem_wide <- UCMR4_HAA_AddtlDataElem %>%
+					  group_by(AdditionalDataElement) %>%
+					  mutate(row = row_number()) %>%
+					  tidyr::pivot_wider(names_from = AdditionalDataElement, values_from = Response) %>%
+					  select(-row)
+			#View(UCMR4_HAA_AddtlDataElem_wide)
+		UCMR4_HAA_AddtlDataElem_wide$PWSID_facilityID <- paste(UCMR4_HAA_AddtlDataElem_wide$PWSID, UCMR4_HAA_AddtlDataElem_wide$FacilityID, sep="")
+
+
+		# Make a table of treatment info by PWSID
+			UCMR4_HAA_AddtlDataElem_wide_1 <- unique(subset(UCMR4_HAA_AddtlDataElem_wide, select = c("PWSID_facilityID", "TreatmentInformation")))
+			UCMR4_HAA_AddtlDataElem_wide_1 <- na.omit(UCMR4_HAA_AddtlDataElem_wide_1)
+			#View(UCMR4_HAA_AddtlDataElem_wide_1)
+			PWSID_TreatmentInfo <- UCMR4_HAA_AddtlDataElem_wide_1 %>% 
+			    group_by(PWSID_facilityID) %>% 
+			    summarise(Treatment = paste(unique(TreatmentInformation), collapse = ', '))
+			#View(PWSID_TreatmentInfo)
+
+			# see how many of these from original UCMR4 set have biofiltration
+			PWSID_TreatmentInfo_BF <- PWSID_TreatmentInfo
+			PWSID_TreatmentInfo_BF$Biofiltration <- ifelse(is.na(PWSID_TreatmentInfo$Treatment), NA, grepl("BIO", PWSID_TreatmentInfo$Treatment))
+			PWSID_TreatmentInfo_BF <- merge(x = PWSID_TreatmentInfo_BF, y = UCMR4_HAA_AddtlDataElem_wide[ , c("PWSID", "FacilityID", "PWSID_facilityID")], by.x = 'PWSID_facilityID', by.y = 'PWSID_facilityID')
+			# Make it only unique rows
+			PWSID_TreatmentInfo_BF <- unique(PWSID_TreatmentInfo_BF)
+			View(PWSID_TreatmentInfo_BF) # There are 7,326 unique facilities with treatment info from UCMR4
+
+			# Of these, how many PWSIDs have different BF status within their included facilities? Filter out to just PWSID and Biofiltration and set to unique, then check for duplicate PWSIDs in that column
+			unique_PWSID_BF <- unique(subset(PWSID_TreatmentInfo_BF, select = c("PWSID", "Biofiltration")))
+			View(unique_PWSID_BF) # 4,418 unique combinations of PWSID and Biofiltration. How many unique PWSIDs then?
+			length(unique(unique_PWSID_BF$PWSID)) # 4,415 so thats only 3 differences. Thats nothing!
+
+			# Okay, combine this info later based on PWSID and see how many NAs. Pick this up again further down in this script...
+
+		# Make tables of disinfectant type and disinfectant residual by PWSID
+			UCMR4_HAA_AddtlDataElem_wide_2 <- unique(subset(UCMR4_HAA_AddtlDataElem_wide, select = c("PWSID_facilityID", "DisinfectantResidual")))
+			#View(UCMR4_HAA_AddtlDataElem_wide_2)
+			UCMR4_HAA_AddtlDataElem_wide_2 <- na.omit(UCMR4_HAA_AddtlDataElem_wide_2)
+			PWSID_DisinfectantResidual <- UCMR4_HAA_AddtlDataElem_wide_2 %>%
+				group_by(PWSID_facilityID) %>% 
+			    summarise(DisinfectantResidual = paste(unique(DisinfectantResidual), collapse = ', '))
+			#View(PWSID_DisinfectantResidual)
+			
+			UCMR4_HAA_AddtlDataElem_wide_3 <- unique(subset(UCMR4_HAA_AddtlDataElem_wide, select = c("PWSID_facilityID", "DisinfectantType")))
+			UCMR4_HAA_AddtlDataElem_wide_3 <- na.omit(UCMR4_HAA_AddtlDataElem_wide_3)
+			PWSID_DisinfectantType <- UCMR4_HAA_AddtlDataElem_wide_3 %>%
+				group_by(PWSID_facilityID) %>% 
+			    summarise(DisinfectantType = paste(unique(DisinfectantType), collapse = ', '))
+			#View(PWSID_DisinfectantType)
+
+# Merge these three new dataframes to original UCMR3 dataframe
+		UCMR3_treatment_disinfR_disinfT_data1 <- left_join(UCMR3_allData, PWSID_DisinfectantType, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+
+		UCMR3_treatment_disinfR_disinfT_data2 <- left_join(UCMR3_treatment_disinfR_disinfT_data1, PWSID_DisinfectantResidual, by = "PWSID_facilityID")
+		UCMR3_treatment_disinfR_disinfT_data3 <- left_join(UCMR3_treatment_disinfR_disinfT_data2, PWSID_TreatmentInfo, by = "PWSID_facilityID")
+		#View(UCMR3_treatment_disinfR_disinfT_data3)
+		final_data <- UCMR3_treatment_disinfR_disinfT_data3
+		#View(final_data)
+
+# Make a new column for whether or not the facility includes biofiltration
+		final_data$Biofiltration1 <- ifelse(is.na(final_data$Treatment), NA, grepl("BIO", final_data$Treatment))
+		final_data <- left_join(final_data, unique_PWSID_BF, by = "PWSID")
+		#View(final_data)
+
+		UCMR3_allData_unique_facility_data <- unique(subset(final_data, select = c("PWSID_facilityID", "PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "DisinfectantType", "DisinfectantResidual", "Treatment", "Biofiltration"))) # This is how many unique facilities with contaminants results is reported in UCMR3 data, 22,221
+			#View(UCMR3_allData_unique_facility_data)
+
+# Find out how many unique facilities included in UCMR3 data report biofiltration, first selecting only the PWSID_facilityIDs and then showing only unique ones and counting the ones with and without BIO and the NAs
+		final_data_check_bio <- unique(subset(final_data, select = c("PWSID_facilityID", "PWSID", "FacilityID", "Biofiltration")))
+		View(final_data_check_bio) # 22,131 total
+
+		facilities_with_bio <- dplyr::filter(final_data_check_bio, Biofiltration == TRUE)
+		View(facilities_with_bio)
+		length(facilities_with_bio$Biofiltration) # 20 report biofiltration
+		
+		facilities_wo_bio <- dplyr::filter(final_data_check_bio, Biofiltration == FALSE)
+		View(facilities_wo_bio)
+		length(facilities_wo_bio$Biofiltration) # 874 report no biofiltration
+		
+		sum(is.na(final_data_check_bio$Biofiltration)) # 21,237 do not report
+
+# Filter contaminant for 1,4-dioxane, strontium, PFOS, PFOA, and 1,2,3-trichloropropane
+	final_data_regdet <- dplyr::filter(final_data,
+										Contaminant == "1,4-dioxane" |
+										Contaminant == "PFOS" |
+										Contaminant == "PFOA" |
+										Contaminant == "strontium" |
+										Contaminant == "1,2,3-trichloropropane")
+
+# combine PWSID and FacilityID to create a unique ID per facility
+	final_data_regdet$PWSID_facilityID <- paste(final_data_regdet$PWSID, final_data_regdet$FacilityID, sep="")
+	#View(final_data_regdet)
+
+# Find out how many unique PWSIDs were in each data set
+	UCMR3_unique_PWSIDs <- length(unique(UCMR3_allData$PWSID)) # 6,200
+	UCMR4_TI_unique_PWSIDs <- length(unique(PWSID_TreatmentInfo$PWSID)) # 4,415
+	UCMR4_DT_unique_PWSIDs <- length(unique(PWSID_DisinfectantType$PWSID)) # 4,456
+	UCMR4_DR_unique_PWSIDs <- length(unique(PWSID_DisinfectantResidual$PWSID)) # 4,434
+	UCMR4_HAA_unique_PWSIDs <- length(unique(UCMR4_HAA_AddtlDataElem$PWSID)) # 4,467
+	final_data_unique_PWSIDs <- length(unique(final_data$PWSID)) # 3,564
+	final_data_regdet_unique_PWSIDs <- length(unique(final_data_regdet$PWSID)) # 3,386
+	
+	final_data_regdet_unique_PWSID_FacilityID <- unique(subset(final_data_regdet, select = c("PWSID_facilityID", "PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "DisinfectantType", "DisinfectantResidual", "Treatment", "Biofiltration")))
+	#View(final_data_regdet_unique_PWSID_FacilityID) # This accounts for all unique facilities that have reported sample data for the reg det contaminants
+
+# Begin nondetect (ND) handling
+
+	# If there is an NA in the Analytical column, make it:
+			
+			# a zero
+				final_data_zero <- final_data_regdet
+				final_data_zero$AnalyticalResultValue <- na_replace(final_data_zero$AnalyticalResultValue, 0.00)
+				final_data_zero$NondetectHandling <- "zero"
+				#View(final_data_zero)
+
+					# dioxane
+						final_data_zero_dioxane <- dplyr::filter(final_data_zero, Contaminant == "1,4-dioxane")
+						
+					# PFOS
+						final_data_zero_PFOS <- dplyr::filter(final_data_zero, Contaminant == "PFOS")
+					
+					# PFOA
+						final_data_zero_PFOA <- dplyr::filter(final_data_zero, Contaminant == "PFOA")
+					
+					# strontium
+						final_data_zero_strontium <- dplyr::filter(final_data_zero, Contaminant == "strontium")
+						
+					# trichloropropane
+						final_data_zero_trichloropropane <- dplyr::filter(final_data_zero, Contaminant == "1,2,3-trichloropropane")
+						
+
+			# equal to the MRL
+
+					# 1,4-dioxane (MRL of 0.07)
+						final_data_dioxane <- dplyr::filter(final_data_regdet, Contaminant == "1,4-dioxane")
+						final_data_MRL_dioxane <- final_data_dioxane
+						final_data_MRL_dioxane$AnalyticalResultValue <- na_replace(final_data_MRL_dioxane$AnalyticalResultValue, 0.07)
+						final_data_MRL_dioxane$NondetectHandling <- "MRL"
+						#View(final_data_MRL_dioxane)
+					# PFOS (MRL of 0.04)
+						final_data_PFOS <- dplyr::filter(final_data_regdet, Contaminant == "PFOS")
+						final_data_MRL_PFOS <- final_data_PFOS
+						final_data_MRL_PFOS$AnalyticalResultValue <- na_replace(final_data_MRL_PFOS$AnalyticalResultValue, 0.04)
+						final_data_MRL_PFOS$NondetectHandling <- "MRL"
+						#View(final_data_MRL_PFOS)
+					# PFOA (MRL of 0.02)
+						final_data_PFOA <- dplyr::filter(final_data_regdet, Contaminant == "PFOA")
+						final_data_MRL_PFOA <- final_data_PFOA
+						final_data_MRL_PFOA$AnalyticalResultValue <- na_replace(final_data_MRL_PFOA$AnalyticalResultValue, 0.02)
+						final_data_MRL_PFOA$NondetectHandling <- "MRL"
+						#View(final_data_MRL_PFOA)
+					# strontium (MRL of 0.30)
+						final_data_strontium <- dplyr::filter(final_data_regdet, Contaminant == "strontium")
+						final_data_MRL_strontium <- final_data_strontium
+						final_data_MRL_strontium$AnalyticalResultValue <- na_replace(final_data_MRL_strontium$AnalyticalResultValue, 0.30)
+						final_data_MRL_strontium$NondetectHandling <- "MRL"
+						#View(final_data_MRL_strontium)
+					# 1,2,3-trichloropropane (MRL of 0.03)
+						final_data_trichloropropane <- dplyr::filter(final_data_regdet, Contaminant == "1,2,3-trichloropropane")
+						final_data_MRL_trichloropropane <- final_data_trichloropropane
+						final_data_MRL_trichloropropane$AnalyticalResultValue <- na_replace(final_data_MRL_trichloropropane$AnalyticalResultValue, 0.03)
+						final_data_MRL_trichloropropane$NondetectHandling <- "MRL"
+						#View(final_data_MRL_trichloropropane)
+					
+
+			# half of the MRL
+
+					# 1,4-dioxane (MRL of 0.07)
+						final_data_dioxane <- dplyr::filter(final_data_regdet, Contaminant == "1,4-dioxane")
+						final_data_0.5MRL_dioxane <- final_data_dioxane
+						final_data_0.5MRL_dioxane$AnalyticalResultValue <- na_replace(final_data_0.5MRL_dioxane$AnalyticalResultValue, 0.07*0.5)
+						final_data_0.5MRL_dioxane$NondetectHandling <- "0.5MRL"
+						#View(final_data_0.5MRL_dioxane)
+					# PFOS (MRL of 0.04)
+						final_data_PFOS <- dplyr::filter(final_data_regdet, Contaminant == "PFOS")
+						final_data_0.5MRL_PFOS <- final_data_PFOS
+						final_data_0.5MRL_PFOS$AnalyticalResultValue <- na_replace(final_data_0.5MRL_PFOS$AnalyticalResultValue, 0.04*0.5)
+						final_data_0.5MRL_PFOS$NondetectHandling <- "0.5MRL"
+						#View(final_data_0.5MRL_PFOS)
+					# PFOA (MRL of 0.02)
+						final_data_PFOA <- dplyr::filter(final_data_regdet, Contaminant == "PFOA")
+						final_data_0.5MRL_PFOA <- final_data_PFOA
+						final_data_0.5MRL_PFOA$AnalyticalResultValue <- na_replace(final_data_0.5MRL_PFOA$AnalyticalResultValue, 0.02*0.5)
+						final_data_0.5MRL_PFOA$NondetectHandling <- "0.5MRL"
+						#View(final_data_0.5MRL_PFOA)
+					# strontium (MRL of 0.30)
+						final_data_strontium <- dplyr::filter(final_data_regdet, Contaminant == "strontium")
+						final_data_0.5MRL_strontium <- final_data_strontium
+						final_data_0.5MRL_strontium$AnalyticalResultValue <- na_replace(final_data_0.5MRL_strontium$AnalyticalResultValue, 0.30*0.5)
+						final_data_0.5MRL_strontium$NondetectHandling <- "0.5MRL"
+						#View(final_data_0.5MRL_strontium)
+					# 1,2,3-trichloropropane (MRL of 0.03)
+						final_data_trichloropropane <- dplyr::filter(final_data_regdet, Contaminant == "1,2,3-trichloropropane")
+						final_data_0.5MRL_trichloropropane <- final_data_trichloropropane
+						final_data_0.5MRL_trichloropropane$AnalyticalResultValue <- na_replace(final_data_0.5MRL_trichloropropane$AnalyticalResultValue, 0.03*0.5)
+						final_data_0.5MRL_trichloropropane$NondetectHandling <- "0.5MRL"
+						#View(final_data_0.5MRL_trichloropropane)
+
+			# quarter of the MRL
+				
+					# 1,4-dioxane (MRL of 0.07)
+						final_data_dioxane <- dplyr::filter(final_data_regdet, Contaminant == "1,4-dioxane")
+						final_data_0.25MRL_dioxane <- final_data_dioxane
+						final_data_0.25MRL_dioxane$AnalyticalResultValue <- na_replace(final_data_0.25MRL_dioxane$AnalyticalResultValue, 0.07*0.25)
+						final_data_0.25MRL_dioxane$NondetectHandling <- "0.25MRL"
+						#View(final_data_0.25MRL_dioxane)
+					# PFOS (MRL of 0.04)
+						final_data_PFOS <- dplyr::filter(final_data_regdet, Contaminant == "PFOS")
+						final_data_0.25MRL_PFOS <- final_data_PFOS
+						final_data_0.25MRL_PFOS$AnalyticalResultValue <- na_replace(final_data_0.25MRL_PFOS$AnalyticalResultValue, 0.04*0.25)
+						final_data_0.25MRL_PFOS$NondetectHandling <- "0.25MRL"
+						#View(final_data_0.25MRL_PFOS)
+					# PFOA (MRL of 0.02)
+						final_data_PFOA <- dplyr::filter(final_data_regdet, Contaminant == "PFOA")
+						final_data_0.25MRL_PFOA <- final_data_PFOA
+						final_data_0.25MRL_PFOA$AnalyticalResultValue <- na_replace(final_data_0.25MRL_PFOA$AnalyticalResultValue, 0.02*0.25)
+						final_data_0.25MRL_PFOA$NondetectHandling <- "0.25MRL"
+						#View(final_data_0.25MRL_PFOA)
+					# strontium (MRL of 0.30)
+						final_data_strontium <- dplyr::filter(final_data_regdet, Contaminant == "strontium")
+						final_data_0.25MRL_strontium <- final_data_strontium
+						final_data_0.25MRL_strontium$AnalyticalResultValue <- na_replace(final_data_0.25MRL_strontium$AnalyticalResultValue, 0.30*0.25)
+						final_data_0.25MRL_strontium$NondetectHandling <- "0.25MRL"
+						#View(final_data_0.25MRL_strontium)
+					# 1,2,3-trichloropropane (MRL of 0.03)
+						final_data_trichloropropane <- dplyr::filter(final_data_regdet, Contaminant == "1,2,3-trichloropropane")
+						final_data_0.25MRL_trichloropropane <- final_data_trichloropropane
+						final_data_0.25MRL_trichloropropane$AnalyticalResultValue <- na_replace(final_data_0.25MRL_trichloropropane$AnalyticalResultValue, 0.03*0.25)
+						final_data_0.25MRL_trichloropropane$NondetectHandling <- "0.25MRL"
+						#View(final_data_0.25MRL_trichloropropane)
+
+
+			# Format data long to graph in ggplot
+
+					# dioxane
+						combined_nondetects_dioxane <- rbind(final_data_zero_dioxane, final_data_MRL_dioxane, final_data_0.5MRL_dioxane, final_data_0.25MRL_dioxane)
+						#View(combined_nondetects_dioxane)
+					# PFOS
+						combined_nondetects_PFOS <- rbind(final_data_zero_PFOS, final_data_MRL_PFOS, final_data_0.5MRL_PFOS, final_data_0.25MRL_PFOS)
+						#View(combined_nondetects_PFOS)
+					# PFOA
+						combined_nondetects_PFOA <- rbind(final_data_zero_PFOA, final_data_MRL_PFOA, final_data_0.5MRL_PFOA, final_data_0.25MRL_PFOA)
+						#View(combined_nondetects_PFOA)
+					# strontium
+						combined_nondetects_strontium <- rbind(final_data_zero_strontium, final_data_MRL_strontium, final_data_0.5MRL_strontium, final_data_0.25MRL_strontium)
+						#View(combined_nondetects_strontium)
+					# trichloropropane
+						combined_nondetects_trichloropropane <- rbind(final_data_zero_trichloropropane, final_data_MRL_trichloropropane, final_data_0.5MRL_trichloropropane, final_data_0.25MRL_trichloropropane)
+						#View(combined_nondetects_trichloropropane)
+
+
+	# Plot Empirical Cumulative Distribution Function (ECDF) for nondetects
+				# How to read an ECDF? https://towardsdatascience.com/what-why-and-how-to-read-empirical-cdf-123e2b922480
+
+				# Plot ECDF
+
+				
+
+					summary(combined_nondetects_dioxane$AnalyticalResultValue)
+					summary(combined_nondetects_PFOS$AnalyticalResultValue)
+					summary(combined_nondetects_PFOA$AnalyticalResultValue)
+					summary(combined_nondetects_strontium$AnalyticalResultValue)
+					summary(combined_nondetects_trichloropropane$AnalyticalResultValue)
+
+				# Dioxane
+
+					ECDF_dioxane <- ggplot(combined_nondetects_dioxane, aes(x = AnalyticalResultValue, group = NondetectHandling, color = NondetectHandling, linetype = NondetectHandling)) + 
+							stat_ecdf(geom = "smooth", pad = TRUE) +
+							theme_bw() +
+							theme(legend.position="top", legend.title = element_blank()) +
+							scale_color_nejm() +
+							#scale_linetype_identity() +
+							#xlim(0.00, 30) +
+							ylab(paste("Empirical Cumulative Distribution Function")) +
+							xlab("1,4 - Dioxane Concentration (\u03BCg/L)") +
+							scale_x_continuous(expand = c(0, 0)) +
+							scale_y_continuous(expand = c(0, 0)) +
+							coord_cartesian(xlim = c(0.00, 0.80))
+					ECDF_dioxane
+
+					#ggsave(ECDF_full, filename = paste("ECDF_full_", Sys.Date(), ".jpeg", sep=""), width=4, height=5, units="in", path = "C:/Users/Andrew/Desktop/AJB_personal/USF/Masters_thesis_word/UCMR_3_dioxane/ECDF")
+
+					# Chose 0.5MRL, as the zero and MRL bias the data lower and higher, respectively
+
+
+				# PFOS
+
+
+					ECDF_PFOS <- ggplot(combined_nondetects_PFOS, aes(x = AnalyticalResultValue, group = NondetectHandling, color = NondetectHandling, linetype = NondetectHandling)) + 
+							stat_ecdf(geom = "smooth", pad = TRUE) +
+							theme_bw() +
+							theme(legend.position="top", legend.title = element_blank()) +
+							scale_color_nejm() +
+							#scale_linetype_identity() +
+							#xlim(0.00, 30) +
+							ylab(paste("Empirical Cumulative Distribution Function")) +
+							xlab("1,4 - PFOS Concentration (\u03BCg/L)") +
+							scale_x_continuous(expand = c(0, 0)) +
+							scale_y_continuous(expand = c(0, 0)) +
+							coord_cartesian(xlim = c(0.00, 0.20))
+					ECDF_PFOS
+
+					#ggsave(ECDF_full, filename = paste("ECDF_full_", Sys.Date(), ".jpeg", sep=""), width=4, height=5, units="in", path = "C:/Users/Andrew/Desktop/AJB_personal/USF/Masters_thesis_word/UCMR_3_dioxane/ECDF")
+
+					# Chose 0.5MRL, as the zero and MRL bias the data lower and higher, respectively
+
+				# PFOA
+
+					ECDF_PFOA <- ggplot(combined_nondetects_PFOA, aes(x = AnalyticalResultValue, group = NondetectHandling, color = NondetectHandling, linetype = NondetectHandling)) + 
+							stat_ecdf(geom = "smooth", pad = TRUE) +
+							theme_bw() +
+							theme(legend.position="top", legend.title = element_blank()) +
+							scale_color_nejm() +
+							#scale_linetype_identity() +
+							#xlim(0.00, 30) +
+							ylab(paste("Empirical Cumulative Distribution Function")) +
+							xlab("1,4 - PFOA Concentration (\u03BCg/L)") +
+							scale_x_continuous(expand = c(0, 0)) +
+							scale_y_continuous(expand = c(0, 0)) +
+							coord_cartesian(xlim = c(0.00, 0.05))
+					ECDF_PFOA
+
+					#ggsave(ECDF_full, filename = paste("ECDF_full_", Sys.Date(), ".jpeg", sep=""), width=4, height=5, units="in", path = "C:/Users/Andrew/Desktop/AJB_personal/USF/Masters_thesis_word/UCMR_3_dioxane/ECDF")
+
+					# Chose 0.5MRL, as the zero and MRL bias the data lower and higher, respectively
+
+				# strontium
+
+					ECDF_strontium <- ggplot(combined_nondetects_strontium, aes(x = AnalyticalResultValue, group = NondetectHandling, color = NondetectHandling, linetype = NondetectHandling)) + 
+							stat_ecdf(geom = "smooth", pad = TRUE) +
+							theme_bw() +
+							theme(legend.position="top", legend.title = element_blank()) +
+							scale_color_nejm() +
+							#scale_linetype_identity() +
+							#xlim(0.00, 30) +
+							ylab(paste("Empirical Cumulative Distribution Function")) +
+							xlab("1,4 - strontium Concentration (\u03BCg/L)") +
+							scale_x_continuous(expand = c(0, 0)) +
+							scale_y_continuous(expand = c(0, 0)) +
+							coord_cartesian(xlim = c(0.00, 0.5), ylim = c(0.00, 0.01))
+					ECDF_strontium
+
+					#ggsave(ECDF_full, filename = paste("ECDF_full_", Sys.Date(), ".jpeg", sep=""), width=4, height=5, units="in", path = "C:/Users/Andrew/Desktop/AJB_personal/USF/Masters_thesis_word/UCMR_3_dioxane/ECDF")
+
+					# Chose 0.5MRL, as the zero and MRL bias the data lower and higher, respectively
+
+				# trichloropropane
+
+					ECDF_trichloropropane <- ggplot(combined_nondetects_trichloropropane, aes(x = AnalyticalResultValue, group = NondetectHandling, color = NondetectHandling, linetype = NondetectHandling)) + 
+							stat_ecdf(geom = "smooth", pad = TRUE) +
+							theme_bw() +
+							theme(legend.position="top", legend.title = element_blank()) +
+							scale_color_nejm() +
+							#scale_linetype_identity() +
+							#xlim(0.00, 30) +
+							ylab(paste("Empirical Cumulative Distribution Function")) +
+							xlab("1,4 - trichloropropane Concentration (\u03BCg/L)") +
+							scale_x_continuous(expand = c(0, 0)) +
+							scale_y_continuous(expand = c(0, 0)) +
+							coord_cartesian(xlim = c(0.00, 0.05))
+					ECDF_trichloropropane
+
+					#ggsave(ECDF_full, filename = paste("ECDF_full_", Sys.Date(), ".jpeg", sep=""), width=4, height=5, units="in", path = "C:/Users/Andrew/Desktop/AJB_personal/USF/Masters_thesis_word/UCMR_3_dioxane/ECDF")
+
+					# Chose 0.5MRL, as the zero and MRL bias the data lower and higher, respectively
+
+# Choose an MRL per contaminant, then use that dataframe below (for sake of speed right now, lets use 0.5MRL):
+
+# Take 95th percentile of AnalyticalResultValue for each PWSID_facilityID, and include particular columns
+				
+			# create the 95th percentile function
+				percentile95 <- function (x){
+					quantile(x, probs = 0.95)
+				}
+
+			
+			# create the new data sets
+
+			# dioxane	
+
+				s95th_dioxane <- aggregate(x = final_data_0.5MRL_dioxane$AnalyticalResultValue,     # Specify data column
+				          by = list(final_data_0.5MRL_dioxane$PWSID_facilityID),                          # Specify group indicator
+				          FUN = percentile95)                                            # Specify function (i.e. mean)
+				colnames(s95th_dioxane) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_dioxane")
+				View(s95th_dioxane)
+
+
+
+			# PFOS	
+
+				s95th_PFOS <- aggregate(x = final_data_0.5MRL_PFOS$AnalyticalResultValue,     # Specify data column
+				          by = list(final_data_0.5MRL_PFOS$PWSID_facilityID),                          # Specify group indicator
+				          FUN = percentile95)                                            # Specify function (i.e. mean)
+				colnames(s95th_PFOS) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_PFOS")
+				View(s95th_PFOS)
+
+
+			# PFOA
+
+				s95th_PFOA <- aggregate(x = final_data_0.5MRL_PFOA$AnalyticalResultValue,     # Specify data column
+				          by = list(final_data_0.5MRL_PFOA$PWSID_facilityID),                          # Specify group indicator
+				          FUN = percentile95)                                            # Specify function (i.e. mean)
+				colnames(s95th_PFOA) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_PFOA")
+				View(s95th_PFOA)
+
+
+			# strontium
+
+				s95th_strontium <- aggregate(x = final_data_0.5MRL_strontium$AnalyticalResultValue,     # Specify data column
+				          by = list(final_data_0.5MRL_strontium$PWSID_facilityID),                          # Specify group indicator
+				          FUN = percentile95)                                            # Specify function (i.e. mean)
+				colnames(s95th_strontium) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_strontium")
+				View(s95th_strontium)
+
+
+			# trichloropropane
+
+				s95th_trichloropropane <- aggregate(x = final_data_0.5MRL_trichloropropane$AnalyticalResultValue,     # Specify data column
+				          by = list(final_data_0.5MRL_trichloropropane$PWSID_facilityID),                          # Specify group indicator
+				          FUN = percentile95)                                            # Specify function (i.e. mean)
+				colnames(s95th_trichloropropane) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_trichloropropane")
+				View(s95th_trichloropropane)
+
+		# Combine each of the above with a copy of final_data_regdet, copying columns over based on PWSID_facilityID listed in each s95th data set
+
+		# Show only columns we care about in final data_regdet, to merge into final s95th data:
+				facility_data <- final_data_regdet_unique_PWSID_FacilityID
+				View(facility_data)
+
+				# dioxane
+
+					# combine facility data by PWSID_FacilityID
+						final_data_s95th_dioxane <- left_join(PWSID_TreatmentInfo, s95th_dioxane, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+						final_data_s95th_dioxane <- unique(final_data_s95th_dioxane) # remove rows that are entire duplicates of other rows
+						View(final_data_s95th_dioxane)
+						summary(final_data_s95th_dioxane$s95thAnalyticalResultValue_dioxane)
+
+					# combine facility by PWSID and FacilityID separately
+						# use the data frame final_data_0.5MRL_dioxane as the second set to pull from for the next left_join:
+						final_data_s95th_dioxane2 <- left_join(s95th_dioxane, final_data_0.5MRL_dioxane, by= 'PWSID_facilityID')
+						View(final_data_s95th_dioxane2)
+
+						final_data_s95th_dioxane2 <- left_join(s95th_dioxane, facility_data, by= c('PWSID', 'FacilityID')) # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+						final_data_s95th_dioxane2 <- unique(final_data_s95th_dioxane2) # remove rows that are entire duplicates of other rows
+						View(final_data_s95th_dioxane2)
+						summary(final_data_s95th_dioxane2$s95thAnalyticalResultValue_dioxane2)
+
+
+					length(unique(final_data_s95th_dioxane$PWSID)) # 4,088 unique public water systems in the dioxane-reporting data set
+					length(unique(final_data_s95th_dioxane$PWSID_facilityID)) # 10,213 unique facilities in the dioxane-reporting data set
+
+					# How many unique public water systems report biofiltration, from the dioxane-reporting data set?
+					unique_PWSIDs_s95th_dioxane <- unique(subset(final_data_s95th_dioxane, select = c("PWSID", "Biofiltration")))
+					View(unique_PWSIDs_s95th_dioxane)
+
+					unique_PWSIDs_s95th_dioxane_facilities_with_bio <- dplyr::filter(unique_PWSIDs_s95th_dioxane, Biofiltration == TRUE)
+					View(unique_PWSIDs_s95th_dioxane_facilities_with_bio)
+					length(unique_PWSIDs_s95th_dioxane_facilities_with_bio$Biofiltration) # 65 report biofiltration
+					
+					unique_PWSIDs_s95th_dioxane_facilities_wo_bio <- dplyr::filter(unique_PWSIDs_s95th_dioxane, Biofiltration == FALSE)
+					View(unique_PWSIDs_s95th_dioxane_facilities_wo_bio)
+					length(unique_PWSIDs_s95th_dioxane_facilities_wo_bio$Biofiltration) # 3,040 report no biofiltration
+					
+					sum(is.na(unique_PWSIDs_s95th_dioxane$Biofiltration)) # 985 do not report
+
+				# PFOS
+
+					final_data_s95th_PFOS <- left_join(s95th_PFOS, facility_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+					final_data_s95th_PFOS <- unique(final_data_s95th_PFOS) # remove rows that are entire duplicates of other rows
+					View(final_data_s95th_PFOS)
+
+				# PFOA
+
+					final_data_s95th_PFOA <- left_join(s95th_PFOA, facility_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+					final_data_s95th_PFOA <- unique(final_data_s95th_PFOA) # remove rows that are entire duplicates of other rows
+					View(final_data_s95th_PFOA)
+
+				# strontium
+
+					final_data_s95th_strontium <- left_join(s95th_strontium, facility_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+					final_data_s95th_strontium <- unique(final_data_s95th_strontium) # remove rows that are entire duplicates of other rows
+					View(final_data_s95th_strontium)
+					
+				# trichloropropane
+
+					final_data_s95th_trichloropropane <- left_join(s95th_trichloropropane, facility_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+					final_data_s95th_trichloropropane <- unique(final_data_s95th_trichloropropane) # remove rows that are entire duplicates of other rows
+					View(final_data_s95th_trichloropropane)
+					
+				# Show an example PWSID from allData....
+				vec <- c('WA5386800')
+				sub_df <- UCMR3_allData[UCMR3_allData$PWSID %in% vec,]
+				sub_df_dioxane <- dplyr::filter(sub_df, Contaminant == "1,4-dioxane")
+				unique(UCMR3_allData$SampleEventCode)
+				View(sub_df_dioxane)
+
+				# Show an example PWSID from dioxane data that has NA's replaced, and combined per facility with 95th percentile
+				vec <- c('WA5386800')
+				sub_df1_dioxane <- final_data_s95th_dioxane[final_data_s95th_dioxane$PWSID %in% vec,]
+				unique(final_data_s95th_dioxane$SampleEventCode)
+				View(sub_df1_dioxane)
+
+				# Filter out and show how many facilities have tested for dioxane AND have reported biofiltration
+				dioxane_and_bio_allData <- dplyr::filter(final_data, Contaminant == "1,4-dioxane" & Biofiltration == FALSE)
+				View(dioxane_and_bio_allData)
+
+
