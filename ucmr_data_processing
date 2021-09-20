@@ -1,7 +1,7 @@
 # Andrew Black
 # andrewjblack0@gmail.com
 
-
+# test change for new branch
 # ctrl-shift-w to close all View tabs
 
 # List out packages
@@ -59,26 +59,22 @@
 			UCMR3_allData <- UCMR3_allData[!with(UCMR3_allData,is.na(MRL)& is.na(AnalyticalResultValue)& is.na(Contaminant)),] # remove rows where MRL is NA AND AnalyticalResultValue is NA, because this is not even a ND, there is no contaminant test reported
 			
 			UCMR3_allData$PWSID_facilityID <- paste(UCMR3_allData$PWSID, UCMR3_allData$FacilityID, sep="")
-
+			UCMR3_allData$PWSID_facilty_water <- paste(UCMR3_allData$PWSID, UCMR3_allData$FacilityWaterType, sep="")
+			#View(UCMR3_allData)
 
 		# UCMR3 disinfectant use data
 			UCMR3_DT <- read.table("UCMR3_DT.txt", fill=TRUE, header=TRUE, quote="", sep="\t", encoding="UTF-8")
 			#View(UCMR3_DT)
+			UCMR3_DT$PWSID_facilityID <- paste(UCMR3_DT$PWSID, UCMR3_DT$FacilityID, sep="")
 			# Remove the columns that are not needed, sample event code and collection date
-			UCMR3_DT <- UCMR3_DT[, c("PWSID", "FacilityID", "SamplePointID", "Disinfectant.Type")]
+			UCMR3_DT <- UCMR3_DT[, c("PWSID_facilityID", "Disinfectant.Type")]
 			# Remove duplicate rows
 			UCMR3_DT <- unique(UCMR3_DT)
-			# verify that there are not any PWSIDs with different disinfectants listed
-			test_UCMR3_DT <- unique(UCMR3_DT$PWSID)
-			#View(test_UCMR3_DT) # got 4,204 unique PWSIDs, lets make sure that matches the unique values below. . 
-			UCMR3_DT <- UCMR3_DT[, c("PWSID", "FacilityID", "Disinfectant.Type")]
-			UCMR3_DT <- unique(UCMR3_DT)
-			#View(UCMR3_DT) # failed test: we get 6,304 rows, meaning some PWSIDs are repeated with different disinfectants
-			UCMR3_DT$PWSID_facilityID <- paste(UCMR3_DT$PWSID, UCMR3_DT$FacilityID, sep="")
+			
 
 			# this means that we must match up the disinfectant data based on BOTH PWSID and FacilityID, because a given PWSID may have multiple facilities under it, and the state-assigned facility ID has been proven not-unique (so, a PWSID from Kansas and Florida may have the same facility number 771, under unique PWSIDs)
 			
-			UCMR3_disinf <- merge(UCMR3_allData, UCMR3_DT, by = "PWSID_facilityID")
+			UCMR3_disinf <- left_join(UCMR3_allData, UCMR3_DT, by = "PWSID_facilityID")
 			#View(UCMR3_disinf)
 
 		# Get a nice list of the column names
