@@ -119,29 +119,11 @@
 
 			# Okay, combine this info later based on PWSID and see how many NAs. Pick this up again further down in this script...
 
-		# Make tables of disinfectant type and disinfectant residual by PWSID
-			UCMR4_HAA_AddtlDataElem_wide_2 <- unique(subset(UCMR4_HAA_AddtlDataElem_wide, select = c("PWSID_facilityID", "DisinfectantResidual")))
-			#View(UCMR4_HAA_AddtlDataElem_wide_2)
-			UCMR4_HAA_AddtlDataElem_wide_2 <- na.omit(UCMR4_HAA_AddtlDataElem_wide_2)
-			PWSID_DisinfectantResidual <- UCMR4_HAA_AddtlDataElem_wide_2 %>%
-				group_by(PWSID_facilityID) %>% 
-			    summarise(DisinfectantResidual = paste(unique(DisinfectantResidual), collapse = ', '))
-			#View(PWSID_DisinfectantResidual)
-			
-			UCMR4_HAA_AddtlDataElem_wide_3 <- unique(subset(UCMR4_HAA_AddtlDataElem_wide, select = c("PWSID_facilityID", "DisinfectantType")))
-			UCMR4_HAA_AddtlDataElem_wide_3 <- na.omit(UCMR4_HAA_AddtlDataElem_wide_3)
-			PWSID_DisinfectantType <- UCMR4_HAA_AddtlDataElem_wide_3 %>%
-				group_by(PWSID_facilityID) %>% 
-			    summarise(DisinfectantType = paste(unique(DisinfectantType), collapse = ', '))
-			#View(PWSID_DisinfectantType)
 
-# Merge these three new dataframes to original UCMR3 dataframe
-		UCMR3_treatment_disinfR_disinfT_data1 <- left_join(UCMR3_allData, PWSID_DisinfectantType, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-
-		UCMR3_treatment_disinfR_disinfT_data2 <- left_join(UCMR3_treatment_disinfR_disinfT_data1, PWSID_DisinfectantResidual, by = "PWSID_facilityID")
-		UCMR3_treatment_disinfR_disinfT_data3 <- left_join(UCMR3_treatment_disinfR_disinfT_data2, PWSID_TreatmentInfo, by = "PWSID_facilityID")
-		#View(UCMR3_treatment_disinfR_disinfT_data3)
-		final_data <- UCMR3_treatment_disinfR_disinfT_data3
+# Merge this new dataframes to original UCMR3 dataframe
+		UCMR3_treatment_data <- left_join(UCMR3_allData, PWSID_TreatmentInfo, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+		
+		final_data <- UCMR3_treatment_data
 		#View(final_data)
 
 # Make a new column for whether or not the facility includes biofiltration
