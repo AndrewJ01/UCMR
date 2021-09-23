@@ -117,14 +117,52 @@
 			View(unique_PWSID_BF) # 4,418 unique combinations of PWSID and Biofiltration. How many unique PWSIDs then?
 			length(unique(unique_PWSID_BF$PWSID)) # 4,415 so thats only 3 differences. Thats nothing!
 
+			# see how many of these from original UCMR4 set have GAC
+			PWSID_TreatmentInfo_GAC <- PWSID_TreatmentInfo_BF
+			PWSID_TreatmentInfo_GAC$GAC <- ifelse(is.na(PWSID_TreatmentInfo_BF$Treatment), NA, grepl("GAC", PWSID_TreatmentInfo_BF$Treatment))
+			PWSID_TreatmentInfo_GAC <- merge(x = PWSID_TreatmentInfo_GAC, y = UCMR4_HAA_AddtlDataElem_wide[ , c("PWSID", "FacilityID", "PWSID_facilityID")], by.x = 'PWSID_facilityID', by.y = 'PWSID_facilityID')
+			# Make it only unique rows
+			PWSID_TreatmentInfo_GAC <- unique(PWSID_TreatmentInfo_GAC)
+			View(PWSID_TreatmentInfo_GAC) # There are 7,326 unique facilities with treatment info from UCMR4
+
+			# Of these, how many PWSIDs have different GAC status within their included facilities? Filter out to just PWSID and GAC and set to unique, then check for duplicate PWSIDs in that column
+			unique_PWSID_GAC <- unique(subset(PWSID_TreatmentInfo_GAC, select = c("PWSID.x", "GAC")))
+			View(unique_PWSID_GAC) # 4,433 unique combinations of PWSID and GAC. How many unique PWSIDs then?
+			length(unique(unique_PWSID_GAC$PWSID)) # 4,415 so thats only 18 differences. Thats not much!
+
+
 			# Okay, combine this info later based on PWSID and see how many NAs. Pick this up again further down in this script...
+			treatment_data <- subset(PWSID_TreatmentInfo_GAC, select = c("PWSID.x", "FacilityID.x", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC"))
+			names(treatment_data)[names(treatment_data)=="PWSID.x"] <- "PWSID"
+			names(treatment_data)[names(treatment_data)=="FacilityID.x"] <- "FacilityID"
+			View(treatment_data)
 
 
-# Merge this new dataframes to original UCMR3 dataframe
-		UCMR3_treatment_data <- left_join(UCMR3_allData, PWSID_TreatmentInfo, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+
+# Merge this new dataframes to original UCMR3 dataframe, first by PWSID_facilityID and count NAs
+		UCMR3_w_treatment_data1 <- left_join(UCMR3_allData, treatment_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+		View(UCMR3_w_treatment_data1)
+		sum(is.na(UCMR3_w_treatment_data1$Biofiltration))
+		sum(is.na(UCMR3_w_treatment_data1$GAC))
 		
-		final_data <- UCMR3_treatment_data
-		#View(final_data)
+
+# Repeat by matching first PWSID then facility ID
+		UCMR3_w_treatment_data2 <- left_join(UCMR3_allData, treatment_data, by= c('PWSID', 'FacilityID')) # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+		View(UCMR3_w_treatment_data2)
+		sum(is.na(UCMR3_w_treatment_data2$Biofiltration))
+		sum(is.na(UCMR3_w_treatment_data2$GAC))
+
+# Repeat by matching just PWSID
+		UCMR3_w_treatment_data3 <- left_join(UCMR3_allData, treatment_data, by= 'PWSID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+		View(UCMR3_w_treatment_data3)
+		sum(is.na(UCMR3_w_treatment_data3$Biofiltration))
+		sum(is.na(UCMR3_w_treatment_data3$GAC))
+
+# This gave us 1,044,447 NA's for set 1 and 2, but only 254,102 NA's for set 3. Can we confirm that it is accurate to assign this info by PWSID, not facility ID? Yes, there were only 3 and 18 mismatches for BIO and GAC, respectively. So only 21 PWSIDs had different responses for these two within their included facilities. Lets go with set 3!
+
+		final_data <- UCMR3_w_treatment_data3
+		View(final_data)
+
 
 # Make a new column for whether or not the facility includes biofiltration
 		final_data$Biofiltration1 <- ifelse(is.na(final_data$Treatment), NA, grepl("BIO", final_data$Treatment))
