@@ -163,51 +163,78 @@
 		final_data <- UCMR3_w_treatment_data3
 		View(final_data)
 
+# Add geolocation data to this, by PWSID
 
-# Make a new column for whether or not the facility includes biofiltration
-		final_data$Biofiltration1 <- ifelse(is.na(final_data$Treatment), NA, grepl("BIO", final_data$Treatment))
-		final_data <- left_join(final_data, unique_PWSID_BF, by = "PWSID")
-		#View(final_data)
+		PWSID_latlong <- read_csv("C:/Users/Andrew/Desktop/AJB_personal/USF/Masters_thesis_word/UCMR_3_dioxane/SDWIS_lat_long_toR.csv")
+		final_data_latlong <- dplyr::left_join(final_data, PWSID_latlong, by = "PWSID")
+		View(final_data_latlong)
 
-		UCMR3_allData_unique_facility_data <- unique(subset(final_data, select = c("PWSID_facilityID", "PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "DisinfectantType", "DisinfectantResidual", "Treatment", "Biofiltration"))) # This is how many unique facilities with contaminants results is reported in UCMR3 data, 22,221
-			#View(UCMR3_allData_unique_facility_data)
+		# Count how many are still missing
+		unique_PWSIDs <- unique(subset(final_data_latlong, select = c("PWSID", "LAT", "LONG")))
+		unique_facilities <- unique(subset(final_data_latlong, select = c("PWSID", "FacilityID.x", "LAT", "LONG")))
+		length(unique_PWSIDs$LAT) # 6,201 unique PWSs geolocated
+		sum(is.na(unique_PWSIDs$LAT)) # 783 missing geolocations out of 6,201 PWSIDs
+		length(unique_facilities$LAT) # 22,134 unique facilities geolocated
+		sum(is.na(unique_facilities$LAT)) # 1,231 missing geolocations out of 22,134 facilities
 
-# Find out how many unique facilities included in UCMR3 data report biofiltration, first selecting only the PWSID_facilityIDs and then showing only unique ones and counting the ones with and without BIO and the NAs
-		final_data_check_bio <- unique(subset(final_data, select = c("PWSID_facilityID", "PWSID", "FacilityID", "Biofiltration")))
-		View(final_data_check_bio) # 22,131 total
+# Find out how many unique facilities included in UCMR3 data report biofiltration, first selecting only the PWSID and then showing only unique ones and counting the ones with and without BIO and the NAs
+		final_data_check_bio <- unique(subset(final_data_latlong, select = c("PWSID", "FacilityID.x", "Biofiltration")))
+		length(final_data_check_bio$PWSID) # 22,156 total unique facilities
 
 		facilities_with_bio <- dplyr::filter(final_data_check_bio, Biofiltration == TRUE)
-		View(facilities_with_bio)
-		length(facilities_with_bio$Biofiltration) # 20 report biofiltration
+		length(facilities_with_bio$Biofiltration) # 405 facilities report biofiltration
 		
 		facilities_wo_bio <- dplyr::filter(final_data_check_bio, Biofiltration == FALSE)
-		View(facilities_wo_bio)
-		length(facilities_wo_bio$Biofiltration) # 874 report no biofiltration
+		length(facilities_wo_bio$Biofiltration) # 15,658 facilities report no biofiltration
 		
-		sum(is.na(final_data_check_bio$Biofiltration)) # 21,237 do not report
+		sum(is.na(final_data_check_bio$Biofiltration)) # 6,093 do not report
+
+
+# Find out how many unique facilities included in UCMR3 data report GAC, first selecting only the PWSID and then showing only unique ones and counting the ones with and without BIO and the NAs
+		final_data_check_GAC <- unique(subset(final_data_latlong, select = c("PWSID", "FacilityID.x", "GAC")))
+		length(final_data_check_GAC$PWSID) # 22,725 total unique facilities
+
+		facilities_with_GAC <- dplyr::filter(final_data_check_GAC, GAC == TRUE)
+		length(facilities_with_GAC$GAC) # 405 facilities report GAC
+		
+		facilities_wo_GAC <- dplyr::filter(final_data_check_GAC, GAC == FALSE)
+		length(facilities_wo_GAC$GAC) # 15,658 facilities report no GAC
+		
+		sum(is.na(final_data_check_GAC$GAC)) # 6,093 do not report
 
 # Filter contaminant for 1,4-dioxane, strontium, PFOS, PFOA, and 1,2,3-trichloropropane
-	final_data_regdet <- dplyr::filter(final_data,
+	final_data_regdet <- dplyr::filter(final_data_latlong,
 										Contaminant == "1,4-dioxane" |
 										Contaminant == "PFOS" |
 										Contaminant == "PFOA" |
 										Contaminant == "strontium" |
 										Contaminant == "1,2,3-trichloropropane")
+# Remove duplicate columns and rename some
+		# Get a nice list of the column names
+			#dput(as.character(names(final_data_regdet)))
+	final_data_regdet <- subset(final_data_regdet, select = c("PWSID", "PWSName.x", "Size", "FacilityID.x", "FacilityName","FacilityWaterType", "SamplePointID", "SamplePointName", "SamplePointType", "AssociatedFacilityID", "AssociatedSamplePointID", "CollectionDate", "SampleID", "Contaminant", "MRL", "MethodID", "AnalyticalResultsSign", "AnalyticalResultValue", "SampleEventCode", "MonitoringRequirement", "Region", "State.x", "PWSID_facilityID.x", "PWSID_facilty_water", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP"))
+
+	names(final_data_regdet)[names(final_data_regdet)=="PWSName.x"] <- "PWSName"
+	names(final_data_regdet)[names(final_data_regdet)=="FacilityID.x"] <- "FacilityID"
+	names(final_data_regdet)[names(final_data_regdet)=="State.x"] <- "State"
+	names(final_data_regdet)[names(final_data_regdet)=="PWSID_facilityID.x"] <- "PWSID_facilityID"
+	#View(final_data_regdet)
+
 
 # combine PWSID and FacilityID to create a unique ID per facility
-	final_data_regdet$PWSID_facilityID <- paste(final_data_regdet$PWSID, final_data_regdet$FacilityID, sep="")
+#	final_data_regdet$PWSID_facilityID <- paste(final_data_regdet$PWSID, final_data_regdet$FacilityID, sep="")
 	#View(final_data_regdet)
 
 # Find out how many unique PWSIDs were in each data set
-	UCMR3_unique_PWSIDs <- length(unique(UCMR3_allData$PWSID)) # 6,200
-	UCMR4_TI_unique_PWSIDs <- length(unique(PWSID_TreatmentInfo$PWSID)) # 4,415
-	UCMR4_DT_unique_PWSIDs <- length(unique(PWSID_DisinfectantType$PWSID)) # 4,456
-	UCMR4_DR_unique_PWSIDs <- length(unique(PWSID_DisinfectantResidual$PWSID)) # 4,434
-	UCMR4_HAA_unique_PWSIDs <- length(unique(UCMR4_HAA_AddtlDataElem$PWSID)) # 4,467
-	final_data_unique_PWSIDs <- length(unique(final_data$PWSID)) # 3,564
-	final_data_regdet_unique_PWSIDs <- length(unique(final_data_regdet$PWSID)) # 3,386
+#	UCMR3_unique_PWSIDs <- length(unique(UCMR3_allData$PWSID)) # 6,200
+#	UCMR4_TI_unique_PWSIDs <- length(unique(PWSID_TreatmentInfo$PWSID)) # 4,415
+#	UCMR4_DT_unique_PWSIDs <- length(unique(PWSID_DisinfectantType$PWSID)) # 4,456
+#	UCMR4_DR_unique_PWSIDs <- length(unique(PWSID_DisinfectantResidual$PWSID)) # 4,434
+#	UCMR4_HAA_unique_PWSIDs <- length(unique(UCMR4_HAA_AddtlDataElem$PWSID)) # 4,467
+#	final_data_unique_PWSIDs <- length(unique(final_data$PWSID)) # 3,564
+#	final_data_regdet_unique_PWSIDs <- length(unique(final_data_regdet$PWSID)) # 3,386
 	
-	final_data_regdet_unique_PWSID_FacilityID <- unique(subset(final_data_regdet, select = c("PWSID_facilityID", "PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "DisinfectantType", "DisinfectantResidual", "Treatment", "Biofiltration")))
+#	final_data_regdet_unique_PWSID_FacilityID <- unique(subset(final_data_regdet, select = c("PWSID_facilityID", "PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "DisinfectantType", "DisinfectantResidual", "Treatment", "Biofiltration")))
 	#View(final_data_regdet_unique_PWSID_FacilityID) # This accounts for all unique facilities that have reported sample data for the reg det contaminants
 
 # Begin nondetect (ND) handling
@@ -471,7 +498,7 @@
 
 					# Chose 0.5MRL, as the zero and MRL bias the data lower and higher, respectively
 
-# Choose an MRL per contaminant, then use that dataframe below (for sake of speed right now, lets use 0.5MRL):
+# Choose an MRL per contaminant, then use that dataframe below (use 0.5MRL):
 
 # Take 95th percentile of AnalyticalResultValue for each PWSID_facilityID, and include particular columns
 				
