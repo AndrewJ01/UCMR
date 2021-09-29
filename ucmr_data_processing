@@ -3,6 +3,7 @@
 
 # test change for new branch
 # ctrl-shift-w to close all View tabs
+# ctrl-/ to comment-out a section
 
 # List out packages
 	packages = c("ggplot2",
@@ -28,7 +29,8 @@
 						 "stringr",
 						 "ggthemes",
 						 "scales",
-						 "grid")
+						 "grid",
+						 "reshape2")
 
 
 	# Now load or install&load all
@@ -110,11 +112,11 @@
 			PWSID_TreatmentInfo_BF <- merge(x = PWSID_TreatmentInfo_BF, y = UCMR4_HAA_AddtlDataElem_wide[ , c("PWSID", "FacilityID", "PWSID_facilityID")], by.x = 'PWSID_facilityID', by.y = 'PWSID_facilityID')
 			# Make it only unique rows
 			PWSID_TreatmentInfo_BF <- unique(PWSID_TreatmentInfo_BF)
-			View(PWSID_TreatmentInfo_BF) # There are 7,326 unique facilities with treatment info from UCMR4
+			#View(PWSID_TreatmentInfo_BF) # There are 7,326 unique facilities with treatment info from UCMR4
 
 			# Of these, how many PWSIDs have different BF status within their included facilities? Filter out to just PWSID and Biofiltration and set to unique, then check for duplicate PWSIDs in that column
 			unique_PWSID_BF <- unique(subset(PWSID_TreatmentInfo_BF, select = c("PWSID", "Biofiltration")))
-			View(unique_PWSID_BF) # 4,418 unique combinations of PWSID and Biofiltration. How many unique PWSIDs then?
+			#View(unique_PWSID_BF) # 4,418 unique combinations of PWSID and Biofiltration. How many unique PWSIDs then?
 			length(unique(unique_PWSID_BF$PWSID)) # 4,415 so thats only 3 differences. Thats nothing!
 
 			# see how many of these from original UCMR4 set have GAC
@@ -123,11 +125,11 @@
 			PWSID_TreatmentInfo_GAC <- merge(x = PWSID_TreatmentInfo_GAC, y = UCMR4_HAA_AddtlDataElem_wide[ , c("PWSID", "FacilityID", "PWSID_facilityID")], by.x = 'PWSID_facilityID', by.y = 'PWSID_facilityID')
 			# Make it only unique rows
 			PWSID_TreatmentInfo_GAC <- unique(PWSID_TreatmentInfo_GAC)
-			View(PWSID_TreatmentInfo_GAC) # There are 7,326 unique facilities with treatment info from UCMR4
+			#View(PWSID_TreatmentInfo_GAC) # There are 7,326 unique facilities with treatment info from UCMR4
 
 			# Of these, how many PWSIDs have different GAC status within their included facilities? Filter out to just PWSID and GAC and set to unique, then check for duplicate PWSIDs in that column
 			unique_PWSID_GAC <- unique(subset(PWSID_TreatmentInfo_GAC, select = c("PWSID.x", "GAC")))
-			View(unique_PWSID_GAC) # 4,433 unique combinations of PWSID and GAC. How many unique PWSIDs then?
+			#View(unique_PWSID_GAC) # 4,433 unique combinations of PWSID and GAC. How many unique PWSIDs then?
 			length(unique(unique_PWSID_GAC$PWSID)) # 4,415 so thats only 18 differences. Thats not much!
 
 
@@ -135,39 +137,39 @@
 			treatment_data <- subset(PWSID_TreatmentInfo_GAC, select = c("PWSID.x", "FacilityID.x", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC"))
 			names(treatment_data)[names(treatment_data)=="PWSID.x"] <- "PWSID"
 			names(treatment_data)[names(treatment_data)=="FacilityID.x"] <- "FacilityID"
-			View(treatment_data)
+			#View(treatment_data)
 
 
 
 # Merge this new dataframes to original UCMR3 dataframe, first by PWSID_facilityID and count NAs
 		UCMR3_w_treatment_data1 <- left_join(UCMR3_allData, treatment_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-		View(UCMR3_w_treatment_data1)
+		#View(UCMR3_w_treatment_data1)
 		sum(is.na(UCMR3_w_treatment_data1$Biofiltration))
 		sum(is.na(UCMR3_w_treatment_data1$GAC))
 		
 
 # Repeat by matching first PWSID then facility ID
 		UCMR3_w_treatment_data2 <- left_join(UCMR3_allData, treatment_data, by= c('PWSID', 'FacilityID')) # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-		View(UCMR3_w_treatment_data2)
+		#View(UCMR3_w_treatment_data2)
 		sum(is.na(UCMR3_w_treatment_data2$Biofiltration))
 		sum(is.na(UCMR3_w_treatment_data2$GAC))
 
 # Repeat by matching just PWSID
 		UCMR3_w_treatment_data3 <- left_join(UCMR3_allData, treatment_data, by= 'PWSID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-		View(UCMR3_w_treatment_data3)
+		#View(UCMR3_w_treatment_data3)
 		sum(is.na(UCMR3_w_treatment_data3$Biofiltration))
 		sum(is.na(UCMR3_w_treatment_data3$GAC))
 
 # This gave us 1,044,447 NA's for set 1 and 2, but only 254,102 NA's for set 3. Can we confirm that it is accurate to assign this info by PWSID, not facility ID? Yes, there were only 3 and 18 mismatches for BIO and GAC, respectively. So only 21 PWSIDs had different responses for these two within their included facilities. Lets go with set 3!
 
 		final_data <- UCMR3_w_treatment_data3
-		View(final_data)
+		#View(final_data)
 
 # Add geolocation data to this, by PWSID
 
 		PWSID_latlong <- read_csv("C:/Users/Andrew/Desktop/AJB_personal/USF/Masters_thesis_word/UCMR_3_dioxane/SDWIS_lat_long_toR.csv")
 		final_data_latlong <- dplyr::left_join(final_data, PWSID_latlong, by = "PWSID")
-		View(final_data_latlong)
+		#View(final_data_latlong)
 
 		# Count how many are still missing
 		unique_PWSIDs <- unique(subset(final_data_latlong, select = c("PWSID", "LAT", "LONG")))
@@ -218,7 +220,9 @@
 	names(final_data_regdet)[names(final_data_regdet)=="FacilityID.x"] <- "FacilityID"
 	names(final_data_regdet)[names(final_data_regdet)=="State.x"] <- "State"
 	names(final_data_regdet)[names(final_data_regdet)=="PWSID_facilityID.x"] <- "PWSID_facilityID"
-	#View(final_data_regdet)
+	
+
+	View(final_data_regdet)
 
 
 # combine PWSID and FacilityID to create a unique ID per facility
@@ -500,6 +504,20 @@
 
 # Choose an MRL per contaminant, then use that dataframe below (use 0.5MRL):
 
+		# First, combine the contaminant dataframes, wide, by PWSID_facilityID. Then, use melt to get them in long format
+		
+
+
+
+
+
+
+
+
+
+
+
+
 # Take 95th percentile of AnalyticalResultValue for each PWSID_facilityID, and include particular columns
 				
 			# create the 95th percentile function
@@ -555,87 +573,286 @@
 				colnames(s95th_trichloropropane) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_trichloropropane")
 				View(s95th_trichloropropane)
 
-		# Combine each of the above with a copy of final_data_regdet, copying columns over based on PWSID_facilityID listed in each s95th data set
+	# Combine each of the above with a copy of final_data_regdet, copying columns over based on PWSID_facilityID listed in each s95th data set
 
-		# Show only columns we care about in final data_regdet, to merge into final s95th data:
-				facility_data <- final_data_regdet_unique_PWSID_FacilityID
-				View(facility_data)
+		# First, subset final_data_regdet to just facility data info
+			dput(as.character(names(final_data_regdet)))
+			facility_data_end <- unique(subset(final_data_regdet, select = c("PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP")))
+			View(facility_data_end)
+		# Now, add in each 95th data set as new columns, KEEPING ALL DATA
+			d1 <- merge(x=facility_data_end, y=s95th_dioxane, by="PWSID_facilityID", all=TRUE)
+			d2 <- merge(x=d1, y=s95th_PFOA, by="PWSID_facilityID", all=TRUE)
+			d3 <- merge(x=d2, y=s95th_PFOS, by="PWSID_facilityID", all=TRUE)
+			d4 <- merge(x=d3, y=s95th_strontium, by="PWSID_facilityID", all=TRUE)
+			final_95th_wide <- merge(x=d4, y=s95th_trichloropropane, by="PWSID_facilityID", all=TRUE)
 
-				# dioxane
+			View(final_95th_wide)
 
-					# combine facility data by PWSID_FacilityID
-						final_data_s95th_dioxane <- left_join(PWSID_TreatmentInfo, s95th_dioxane, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-						final_data_s95th_dioxane <- unique(final_data_s95th_dioxane) # remove rows that are entire duplicates of other rows
-						View(final_data_s95th_dioxane)
-						summary(final_data_s95th_dioxane$s95thAnalyticalResultValue_dioxane)
+			final_95th_long <- melt(final_95th_wide,
+				id.vars = c("PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP"), 
+				measure.vars = c("s95thAnalyticalResultValue_trichloropropane","s95thAnalyticalResultValue_dioxane","s95thAnalyticalResultValue_PFOS", "s95thAnalyticalResultValue_PFOA", "s95thAnalyticalResultValue_strontium"))
+			
 
-					# combine facility by PWSID and FacilityID separately
-						# use the data frame final_data_0.5MRL_dioxane as the second set to pull from for the next left_join:
-						final_data_s95th_dioxane2 <- left_join(s95th_dioxane, final_data_0.5MRL_dioxane, by= 'PWSID_facilityID')
-						View(final_data_s95th_dioxane2)
-
-						final_data_s95th_dioxane2 <- left_join(s95th_dioxane, facility_data, by= c('PWSID', 'FacilityID')) # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-						final_data_s95th_dioxane2 <- unique(final_data_s95th_dioxane2) # remove rows that are entire duplicates of other rows
-						View(final_data_s95th_dioxane2)
-						summary(final_data_s95th_dioxane2$s95thAnalyticalResultValue_dioxane2)
+			# remove rows that have NA in "value", because these were already replaced in the NA replace section. . . currently at 96,470 rows, dropping down to:
+			final_95th_long <- final_95th_long[!is.na(final_95th_long$value),]
+			View(final_95th_long) # down to 70,112 rows now
 
 
-					length(unique(final_data_s95th_dioxane$PWSID)) # 4,088 unique public water systems in the dioxane-reporting data set
-					length(unique(final_data_s95th_dioxane$PWSID_facilityID)) # 10,213 unique facilities in the dioxane-reporting data set
 
-					# How many unique public water systems report biofiltration, from the dioxane-reporting data set?
-					unique_PWSIDs_s95th_dioxane <- unique(subset(final_data_s95th_dioxane, select = c("PWSID", "Biofiltration")))
-					View(unique_PWSIDs_s95th_dioxane)
+# Lets get mapping!
 
-					unique_PWSIDs_s95th_dioxane_facilities_with_bio <- dplyr::filter(unique_PWSIDs_s95th_dioxane, Biofiltration == TRUE)
-					View(unique_PWSIDs_s95th_dioxane_facilities_with_bio)
-					length(unique_PWSIDs_s95th_dioxane_facilities_with_bio$Biofiltration) # 65 report biofiltration
-					
-					unique_PWSIDs_s95th_dioxane_facilities_wo_bio <- dplyr::filter(unique_PWSIDs_s95th_dioxane, Biofiltration == FALSE)
-					View(unique_PWSIDs_s95th_dioxane_facilities_wo_bio)
-					length(unique_PWSIDs_s95th_dioxane_facilities_wo_bio$Biofiltration) # 3,040 report no biofiltration
-					
-					sum(is.na(unique_PWSIDs_s95th_dioxane$Biofiltration)) # 985 do not report
+	# Start with final_95th_long, and make PCounty data into a new column called "subregion", and make the entry lowercase entries of PCounty
+		final_95th_long$subregion <- tolower(final_95th_long$PCounty)
 
-				# PFOS
+	# Subset to get only the data we need to map by subregion (****** combine data per subregion with s95th function****)
+		heatmap_by_county_data <- subset(final_95th_long, select = c("variable", "value", "State", "subregion"))
+		head(heatmap_by_county_data)
+# load map outline data
+	us_counties <- map_data("county")
+	head(us_counties)
 
-					final_data_s95th_PFOS <- left_join(s95th_PFOS, facility_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-					final_data_s95th_PFOS <- unique(final_data_s95th_PFOS) # remove rows that are entire duplicates of other rows
-					View(final_data_s95th_PFOS)
 
-				# PFOA
+# biofilter/GAC location data for entire US from all UCMR4 data:
+			treatment_data <- subset(final_data_latlong, select = c("PWSID_facilityID.x", "LAT", "LONG", "Biofiltration", "GAC"))
+			treatment_data <- unique(treatment_data)
+			View(treatment_data) # 22,736 facilities
+			treatment_data_BF <- dplyr::filter(treatment_data, Biofiltration == TRUE) # 405 facilities in the US with BF
+			treatment_data_BF <- unique(treatment_data_BF)
+			View(treatment_data_BF)
+			treatment_data_GAC <- dplyr::filter(treatment_data, GAC == TRUE)
+			treatment_data_GAC <- unique(treatment_data_GAC)
+			View(treatment_data_GAC) # 2,007 facilities with GAC in the US
 
-					final_data_s95th_PFOA <- left_join(s95th_PFOA, facility_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-					final_data_s95th_PFOA <- unique(final_data_s95th_PFOA) # remove rows that are entire duplicates of other rows
-					View(final_data_s95th_PFOA)
+			# just with unique coordinates, for mapping purposes:
+			treatment_data_to_map_BF <- unique(subset(treatment_data_BF, select = c("LAT", "LONG", "Biofiltration")))
+			View(treatment_data_to_map_BF) # 72 coordinates with known BF
+			treatment_data_to_map_GAC <- unique(subset(treatment_data_GAC, select = c("LAT", "LONG", "GAC")))
+			treatment_data_to_map_GAC <- filter(treatment_data_to_map_GAC, LONG > -150)
+			View(treatment_data_to_map_GAC) # 239 coordinates with known GAC
 
-				# strontium
+# combine this with the data we want to show	
+	
+	# Dioxane
+		dioxane_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_dioxane")
+		dioxane_map_data <- aggregate(dioxane_map_data$value, by = list(dioxane_map_data$subregion), FUN = mean)
+		dioxane_map_data$subregion <- dioxane_map_data$Group.1
+		dioxane_map_data$value <- dioxane_map_data$x
+		dioxane_map_data <- left_join(us_counties, dioxane_map_data, by= "subregion")
+		dioxane_map_data$exceeds_MRL <- dioxane_map_data$value > 0.07 # MRL for dioxane
+		dioxane_map_data$value_that_exceeded_MRL <- ifelse(dioxane_map_data$value > 0.035, dioxane_map_data$value, NA) # if value exceeds half the MRL for a county, then a value for that county was reported above the MRL, so dioxane was found in that county
+		dioxane_map_data$exceeds_limit <- dioxane_map_data$value > 1 # limit for dioxane is 1 ug/L, based on NY MCL
+		View(dioxane_map_data)
 
-					final_data_s95th_strontium <- left_join(s95th_strontium, facility_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-					final_data_s95th_strontium <- unique(final_data_s95th_strontium) # remove rows that are entire duplicates of other rows
-					View(final_data_s95th_strontium)
-					
-				# trichloropropane
+	# PFOS
+		PFOS_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_PFOS")
+		PFOS_map_data <- aggregate(PFOS_map_data$value, by = list(PFOS_map_data$subregion), FUN = mean)
+		PFOS_map_data$subregion <- PFOS_map_data$Group.1
+		PFOS_map_data$value <- PFOS_map_data$x
+		PFOS_map_data <- left_join(us_counties, PFOS_map_data, by= "subregion")
+		PFOS_map_data$exceeds_MRL <- PFOS_map_data$value > 0.04 # MRL for PFOS
+		PFOS_map_data$exceeds_limit <- PFOS_map_data$value > 0.010 # The current lowest, NY advisory/standard
+		View(PFOS_map_data)
 
-					final_data_s95th_trichloropropane <- left_join(s95th_trichloropropane, facility_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
-					final_data_s95th_trichloropropane <- unique(final_data_s95th_trichloropropane) # remove rows that are entire duplicates of other rows
-					View(final_data_s95th_trichloropropane)
-					
-				# Show an example PWSID from allData....
-				vec <- c('WA5386800')
-				sub_df <- UCMR3_allData[UCMR3_allData$PWSID %in% vec,]
-				sub_df_dioxane <- dplyr::filter(sub_df, Contaminant == "1,4-dioxane")
-				unique(UCMR3_allData$SampleEventCode)
-				View(sub_df_dioxane)
+	# PFOA
+		PFOA_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_PFOA")
+		PFOA_map_data <- aggregate(PFOA_map_data$value, by = list(PFOA_map_data$subregion), FUN = mean)
+		PFOA_map_data$subregion <- PFOA_map_data$Group.1
+		PFOA_map_data$value <- PFOA_map_data$x
+		PFOA_map_data <- left_join(us_counties, PFOA_map_data, by= "subregion")
 
-				# Show an example PWSID from dioxane data that has NA's replaced, and combined per facility with 95th percentile
-				vec <- c('WA5386800')
-				sub_df1_dioxane <- final_data_s95th_dioxane[final_data_s95th_dioxane$PWSID %in% vec,]
-				unique(final_data_s95th_dioxane$SampleEventCode)
-				View(sub_df1_dioxane)
+		# for (value in PFOA_map_data$value) { if (PFOA_map_data$value > 0.0065){ # this is California notification level
+  #   		PFOA_map_data$value_exceeded <- "6.5"
+		# 	} else if (PFOA_map_data$value > 0.008){
+  #   			PFOA_map_data$value_exceeded <- "8"
+		# 	} else {
+		# 		PFOA_map_data$value_exceeded <- "Does not exceed"
+		# 	}
+		# }
 
-				# Filter out and show how many facilities have tested for dioxane AND have reported biofiltration
-				dioxane_and_bio_allData <- dplyr::filter(final_data, Contaminant == "1,4-dioxane" & Biofiltration == FALSE)
-				View(dioxane_and_bio_allData)
+		#PFOA_map_data$value_exceeded <- ifelse(PFOA_map_data$value > 0.0065, ifelse(PFOA_map_data$value > 0.008))
+		PFOA_map_data$exceeds_limit <- PFOA_map_data$value > 0.008 # Current lowest, Michigan's new enforceable
+		PFOA_map_data$exceeds_MRL <- PFOA_map_data$value > 0.02 # MRL for PFOA
+		View(PFOA_map_data)
+
+	# trichloropropane
+		trichloropropane_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_trichloropropane")
+		trichloropropane_map_data <- aggregate(trichloropropane_map_data$value, by = list(trichloropropane_map_data$subregion), FUN = mean)
+		trichloropropane_map_data$subregion <- trichloropropane_map_data$Group.1
+		trichloropropane_map_data$value <- trichloropropane_map_data$x
+		trichloropropane_map_data <- left_join(us_counties, trichloropropane_map_data, by= "subregion")
+		trichloropropane_map_data$exceeds_MRL <- trichloropropane_map_data$value > 0.03 # MRL for trichloropropane
+		trichloropropane_map_data$exceeds_limit <- trichloropropane_map_data$value > 0.00003 # 3 x 10^-5 ug/L in Texas
+		View(trichloropropane_map_data)
+
+	# strontium
+		strontium_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_strontium")
+		strontium_map_data <- aggregate(strontium_map_data$value, by = list(strontium_map_data$subregion), FUN = mean)
+		strontium_map_data$subregion <- strontium_map_data$Group.1
+		strontium_map_data$value <- strontium_map_data$x
+		strontium_map_data <- left_join(us_counties, strontium_map_data, by= "subregion")
+		dioxane_map_data$exceeds_limit <- dioxane_map_data$value > 1 # limit for dioxane is 1 ug/L, based on NY MCL
+		View(strontium_map_data)
+
+# map it
+
+	# heatmap of dioxane with biofilter locations shown
+
+		ggplot(dioxane_map_data, aes(x=long,y=lat,group=group, fill=value_that_exceeded_MRL)) +
+			geom_polygon(color = "gray90", size = 0.1) +
+			coord_map(projection = "albers", lat0 = 45, lat1 = 55)  +
+			scale_fill_continuous(type = "viridis") +
+	  		theme(legend.position="bottom",
+		        axis.line=element_blank(),
+		        axis.text=element_blank(),
+		        axis.ticks=element_blank(),
+		        axis.title=element_blank(),
+		        panel.background=element_blank(),
+		        panel.border=element_blank(),
+		        panel.grid=element_blank())
+	  		
+
+	  	dioxane_detects_w_BF <- ggplot(data = dioxane_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=value_that_exceeded_MRL), color = "gray90", size = 0.1)  +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+							  		theme(legend.position="bottom",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "yellow", size = 3, aes(x = LONG, y = LAT))
+			dioxane_detects_w_BF
+
+		dioxane_detects_w_GAC <- ggplot(data = dioxane_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=value_that_exceeded_MRL), color = "gray90", size = 0.1)  +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+							  		theme(legend.position="bottom",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 21, colour = "black", fill = "green", size = 3, aes(x = LONG, y = LAT))
+			dioxane_detects_w_GAC
+
+
+	
+	# Multiple plot function
+
+			# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+			# - cols:   Number of columns in layout
+			# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+			#
+			# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+			# then plot 1 will go in the upper left, 2 will go in the upper right, and
+			# 3 will go all the way across the bottom.
+			#
+			multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+			  require(grid)
+
+			  # Make a list from the ... arguments and plotlist
+			  plots <- c(list(...), plotlist)
+
+			  numPlots = length(plots)
+
+			  # If layout is NULL, then use 'cols' to determine layout
+			  if (is.null(layout)) {
+			    # Make the panel
+			    # ncol: Number of columns of plots
+			    # nrow: Number of rows needed, calculated from # of cols
+			    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+			                    ncol = cols, nrow = ceiling(numPlots/cols))
+			  }
+
+			 if (numPlots==1) {
+			    print(plots[[1]])
+
+			  } else {
+			    # Set up the page
+			    grid.newpage()
+			    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+			    # Make each plot, in the correct location
+			    for (i in 1:numPlots) {
+			      # Get the i,j matrix positions of the regions that contain this subplot
+			      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+			      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+			                                      layout.pos.col = matchidx$col))
+			    }
+			  }
+			}
+
+	# exceeds MRL
+
+		
+	p1 <-	ggplot(dioxane_map_data, aes(x=long,y=lat,group=group, fill=exceeds_MRL)) +
+			  geom_polygon(color = "gray90", size = 0.1) +
+			  #coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+			  coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+			  theme(legend.position="bottom",
+			        axis.line=element_blank(),
+			        axis.text=element_blank(),
+			        axis.ticks=element_blank(),
+			        axis.title=element_blank(),
+			        panel.background=element_blank(),
+			        panel.border=element_blank(),
+			        panel.grid=element_blank()) +
+			  labs(title="Dioxane")
+
+	p2 <-	ggplot(PFOA_map_data, aes(x=long,y=lat,group=group, fill=exceeds_MRL)) +
+			  geom_polygon(color = "gray90", size = 0.1) +
+			  #coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+			  coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+			  theme(legend.position="bottom",
+			        axis.line=element_blank(),
+			        axis.text=element_blank(),
+			        axis.ticks=element_blank(),
+			        axis.title=element_blank(),
+			        panel.background=element_blank(),
+			        panel.border=element_blank(),
+			        panel.grid=element_blank()) +
+			  labs(title="PFOA")
+
+	p3 <-	ggplot(PFOS_map_data, aes(x=long,y=lat,group=group, fill=exceeds_MRL)) +
+			  geom_polygon(color = "gray90", size = 0.1) +
+			  #coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+			  coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+			  theme(legend.position="bottom",
+			        axis.line=element_blank(),
+			        axis.text=element_blank(),
+			        axis.ticks=element_blank(),
+			        axis.title=element_blank(),
+			        panel.background=element_blank(),
+			        panel.border=element_blank(),
+			        panel.grid=element_blank()) +
+			  labs(title="PFOS")
+
+	p4 <-	ggplot(trichloropropane_map_data, aes(x=long,y=lat,group=group, fill=exceeds_MRL)) +
+			  geom_polygon(color = "gray90", size = 0.1) +
+			  #coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+			  coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+			  theme(legend.position="bottom",
+			        axis.line=element_blank(),
+			        axis.text=element_blank(),
+			        axis.ticks=element_blank(),
+			        axis.title=element_blank(),
+			        panel.background=element_blank(),
+			        panel.border=element_blank(),
+			        panel.grid=element_blank()) +
+			  labs(title="TCP")
+
+	
+	#multiplot(p1, p2, p3, p4, cols=2)
+
+	p1
+	p2
+	p3
+	p4
+
 
 
