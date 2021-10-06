@@ -30,7 +30,8 @@
 						 "ggthemes",
 						 "scales",
 						 "grid",
-						 "reshape2")
+						 "reshape2",
+						 "ggpubr")
 
 
 	# Now load or install&load all
@@ -638,7 +639,8 @@
 		dioxane_map_data$subregion <- dioxane_map_data$Group.1
 		dioxane_map_data$value <- dioxane_map_data$x
 		dioxane_map_data <- left_join(us_counties, dioxane_map_data, by= "subregion")
-		dioxane_map_data$exceeds_MRL <- dioxane_map_data$value > 0.07 # MRL for dioxane
+		dioxane_map_data$exceeds_0.5MRL <- dioxane_map_data$value > 0.035 # MRL for dioxane
+		dioxane_map_data$exceeds_0.5MRL_true <- ifelse(dioxane_map_data$exceeds_0.5MRL == TRUE, TRUE, NA)
 		dioxane_map_data$value_that_exceeded_MRL <- ifelse(dioxane_map_data$value > 0.035, dioxane_map_data$value, NA) # if value exceeds half the MRL for a county, then a value for that county was reported above the MRL, so dioxane was found in that county
 		dioxane_map_data$exceeds_limit <- dioxane_map_data$value > 1 # limit for dioxane is 1 ug/L, based on NY MCL
 		View(dioxane_map_data)
@@ -649,7 +651,9 @@
 		PFOS_map_data$subregion <- PFOS_map_data$Group.1
 		PFOS_map_data$value <- PFOS_map_data$x
 		PFOS_map_data <- left_join(us_counties, PFOS_map_data, by= "subregion")
-		PFOS_map_data$exceeds_MRL <- PFOS_map_data$value > 0.04 # MRL for PFOS
+		PFOS_map_data$exceeds_0.5MRL <- PFOS_map_data$value > 0.02 # MRL for PFOS
+		PFOS_map_data$exceeds_0.5MRL_true <- ifelse(PFOS_map_data$exceeds_0.5MRL == TRUE, TRUE, NA)
+		PFOS_map_data$value_that_exceeded_MRL <- ifelse(PFOS_map_data$value > 0.02, PFOS_map_data$value, NA) # if value exceeds half the MRL for a county, then a value for that county was reported above the MRL, so PFOS was found in that county
 		PFOS_map_data$exceeds_limit <- PFOS_map_data$value > 0.010 # The current lowest, NY advisory/standard
 		View(PFOS_map_data)
 
@@ -659,19 +663,10 @@
 		PFOA_map_data$subregion <- PFOA_map_data$Group.1
 		PFOA_map_data$value <- PFOA_map_data$x
 		PFOA_map_data <- left_join(us_counties, PFOA_map_data, by= "subregion")
-
-		# for (value in PFOA_map_data$value) { if (PFOA_map_data$value > 0.0065){ # this is California notification level
-  #   		PFOA_map_data$value_exceeded <- "6.5"
-		# 	} else if (PFOA_map_data$value > 0.008){
-  #   			PFOA_map_data$value_exceeded <- "8"
-		# 	} else {
-		# 		PFOA_map_data$value_exceeded <- "Does not exceed"
-		# 	}
-		# }
-
-		#PFOA_map_data$value_exceeded <- ifelse(PFOA_map_data$value > 0.0065, ifelse(PFOA_map_data$value > 0.008))
+		PFOA_map_data$exceeds_0.5MRL <- PFOA_map_data$value > 0.01 # MRL for PFOA
+		PFOA_map_data$exceeds_0.5MRL_true <- ifelse(PFOA_map_data$exceeds_0.5MRL == TRUE, TRUE, NA)
+		PFOA_map_data$value_that_exceeded_MRL <- ifelse(PFOA_map_data$value > 0.01, PFOA_map_data$value, NA) # if value exceeds half the MRL for a county, then a value for that county was reported above the MRL, so PFOA was found in that county
 		PFOA_map_data$exceeds_limit <- PFOA_map_data$value > 0.008 # Current lowest, Michigan's new enforceable
-		PFOA_map_data$exceeds_MRL <- PFOA_map_data$value > 0.02 # MRL for PFOA
 		View(PFOA_map_data)
 
 	# trichloropropane
@@ -680,7 +675,9 @@
 		trichloropropane_map_data$subregion <- trichloropropane_map_data$Group.1
 		trichloropropane_map_data$value <- trichloropropane_map_data$x
 		trichloropropane_map_data <- left_join(us_counties, trichloropropane_map_data, by= "subregion")
-		trichloropropane_map_data$exceeds_MRL <- trichloropropane_map_data$value > 0.03 # MRL for trichloropropane
+		trichloropropane_map_data$exceeds_0.5MRL <- trichloropropane_map_data$value > 0.015 # MRL for trichloropropane
+		trichloropropane_map_data$exceeds_0.5MRL_true <- ifelse(trichloropropane_map_data$exceeds_0.5MRL == TRUE, TRUE, NA)
+		trichloropropane_map_data$value_that_exceeded_MRL <- ifelse(trichloropropane_map_data$value > 0.015, trichloropropane_map_data$value, NA) # if value exceeds half the MRL for a county, then a value for that county was reported above the MRL, so trichloropropane was found in that county
 		trichloropropane_map_data$exceeds_limit <- trichloropropane_map_data$value > 0.00003 # 3 x 10^-5 ug/L in Texas
 		View(trichloropropane_map_data)
 
@@ -697,10 +694,10 @@
 
 	# heatmap of dioxane with biofilter locations shown
 
-		ggplot(dioxane_map_data, aes(x=long,y=lat,group=group, fill=value_that_exceeded_MRL)) +
+		ggplot(dioxane_map_data, aes(x=long,y=lat,group=group, fill=exceeds_0.5MRL_true)) + # fill=value_that_exceeded_MRL if you want to show a gradient of the concentrations
 			geom_polygon(color = "gray90", size = 0.1) +
 			coord_map(projection = "albers", lat0 = 45, lat1 = 55)  +
-			scale_fill_continuous(type = "viridis") +
+			#scale_fill_continuous(type = "viridis") +   include this if showing gradient of concentrations
 	  		theme(legend.position="bottom",
 		        axis.line=element_blank(),
 		        axis.text=element_blank(),
@@ -709,10 +706,13 @@
 		        panel.background=element_blank(),
 		        panel.border=element_blank(),
 		        panel.grid=element_blank())
-	  		
+	  	
 
-	  	dioxane_detects_w_BF <- ggplot(data = dioxane_map_data) +
-							  		geom_polygon(aes(x = long,y = lat, group = group, fill=value_that_exceeded_MRL), color = "gray90", size = 0.1)  +
+	  colors2 <- rep(c("blue4", "green", "orange"), length.out = groups)
+
+		dioxane_detects_w_BF_GAC <- ggplot(data = dioxane_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "gray90", size = 0.1)  +
+							 		scale_fill_manual(values = colors2) +
 									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
 							  		theme(legend.position="bottom",
 								        axis.line=element_blank(),
@@ -722,13 +722,17 @@
 								        panel.background=element_blank(),
 								        panel.border=element_blank(),
 								        panel.grid=element_blank())+
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "red", size = 3, aes(x = LONG, y = LAT))+
 							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "yellow", size = 3, aes(x = LONG, y = LAT))
-			dioxane_detects_w_BF
+			dioxane_detects_w_BF_GAC
+				#ggsave(dioxane_detects_w_BF_GAC, filename = paste("dioxane_detects_w_BF_GAC_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
 
-		dioxane_detects_w_GAC <- ggplot(data = dioxane_map_data) +
-							  		geom_polygon(aes(x = long,y = lat, group = group, fill=value_that_exceeded_MRL), color = "gray90", size = 0.1)  +
+		dioxane_detects_w_BF_GAC2 <- ggplot(data = dioxane_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "grey30", size = 0.1)  +
 									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
-							  		theme(legend.position="bottom",
+									scale_fill_manual(values = colors2, na.value = "white") +
+									annotate("text", x=-130, y=49, label= "(a)", size = 8) +
+							  		theme(legend.position="none",
 								        axis.line=element_blank(),
 								        axis.text=element_blank(),
 								        axis.ticks=element_blank(),
@@ -736,11 +740,73 @@
 								        panel.background=element_blank(),
 								        panel.border=element_blank(),
 								        panel.grid=element_blank())+
-							  		geom_point(data = treatment_data_to_map_GAC, shape = 21, colour = "black", fill = "green", size = 3, aes(x = LONG, y = LAT))
-			dioxane_detects_w_GAC
+							  		theme(plot.margin = unit(c(-4,-4,-4,-4), "cm")) + # this crops the output figure
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "#D55E00", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "#F0E442", size = 3, aes(x = LONG, y = LAT))
+			dioxane_detects_w_BF_GAC2
+				#ggsave(dioxane_detects_w_BF_GAC2, filename = paste("dioxane_detects_w_BF_GAC2_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
+
+	# heatmap of PFOS detects with BF and GAC
+			PFOS_detects_w_BF_GAC <- ggplot(data = PFOS_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "grey30", size = 0.1)  +
+							 		scale_fill_manual(values = colors2, na.value = "white") +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+									annotate("text", x=-130, y=49, label= "(b)", size = 8) +
+							  		theme(legend.position="none",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		theme(plot.margin = unit(c(-4,-4,-4,-4), "cm")) + # this crops the output figure
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "#D55E00", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "#F0E442", size = 3, aes(x = LONG, y = LAT))
+			PFOS_detects_w_BF_GAC
+				#ggsave(PFOS_detects_w_BF_GAC, filename = paste("PFOS_detects_w_BF_GAC_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
+
+	# heatmap of PFOA detects with BF and GAC
+			PFOA_detects_w_BF_GAC <- ggplot(data = PFOA_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "grey30", size = 0.1)  +
+							 		scale_fill_manual(values = colors2, na.value = "white") +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+									annotate("text", x=-130, y=49, label= "(c)", size = 8) +
+							  		theme(legend.position="none",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		theme(plot.margin = unit(c(-4,-4,-4,-4), "cm")) + # this crops the output figure
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "#D55E00", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "#F0E442", size = 3, aes(x = LONG, y = LAT))
+			PFOA_detects_w_BF_GAC
+				#ggsave(PFOA_detects_w_BF_GAC, filename = paste("PFOA_detects_w_BF_GAC_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
+
+	# heatmap of trichloropropane detects with BF and GAC
+			trichloropropane_detects_w_BF_GAC <- ggplot(data = trichloropropane_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "grey30", size = 0.1)  +
+							 		scale_fill_manual(values = colors2, na.value = "white") +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+									annotate("text", x=-130, y=49, label= "(d)", size = 8) +
+							  		theme(legend.position="none",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		theme(plot.margin = unit(c(-4,-4,-4,-4), "cm")) + # this crops the output figure
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "#D55E00", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "#F0E442", size = 3, aes(x = LONG, y = LAT))
+			trichloropropane_detects_w_BF_GAC
+				#ggsave(trichloropropane_detects_w_BF_GAC, filename = paste("trichloropropane_detects_w_BF_GAC_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
 
 
-	
 	# Multiple plot function
 
 			# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
@@ -788,6 +854,11 @@
 			}
 
 	# exceeds MRL
+
+	multiplot(dioxane_detects_w_BF_GAC2, PFOS_detects_w_BF_GAC, cols=1)
+
+
+	multiplot(PFOA_detects_w_BF_GAC, trichloropropane_detects_w_BF_GAC, cols=1)
 
 		
 	p1 <-	ggplot(dioxane_map_data, aes(x=long,y=lat,group=group, fill=exceeds_MRL)) +
@@ -855,4 +926,169 @@
 	p4
 
 
+# Boxplots of concentrations
 
+ggplot(data = final_95th_long, mapping = aes(x = variable, y = value)) +
+    geom_boxplot(alpha = 0) +
+    geom_jitter(alpha = 0.3, color = "tomato")
+
+
+  # remove strontium
+  final_95th_long_rem_strontium <- dplyr::filter(final_95th_long,
+										variable == "s95thAnalyticalResultValue_dioxane" |
+										variable == "s95thAnalyticalResultValue_trichloropropane" |
+										variable == "s95thAnalyticalResultValue_PFOA" |
+										variable == "s95thAnalyticalResultValue_PFOS")
+
+  	
+  # remove non-detects and show log scale for value
+  	final_s95th_wide_detects <- final_95th_wide
+  	final_s95th_wide_detects$Dioxane <- ifelse(final_s95th_wide_detects$s95thAnalyticalResultValue_dioxane > 0.07, final_s95th_wide_detects$s95thAnalyticalResultValue_dioxane, NA)
+  	final_s95th_wide_detects$PFOS <- ifelse(final_s95th_wide_detects$s95thAnalyticalResultValue_PFOS > 0.04, final_s95th_wide_detects$s95thAnalyticalResultValue_PFOS, NA)
+  	final_s95th_wide_detects$PFOA <- ifelse(final_s95th_wide_detects$s95thAnalyticalResultValue_PFOA > 0.02, final_s95th_wide_detects$s95thAnalyticalResultValue_PFOA, NA)
+  	final_s95th_wide_detects$TCP <- ifelse(final_s95th_wide_detects$s95thAnalyticalResultValue_trichloropropane > 0.03, final_s95th_wide_detects$s95thAnalyticalResultValue_trichloropropane, NA)
+
+
+  		# format long for plotting
+  			final_s95th_wide_detects_long <- melt(final_s95th_wide_detects,
+				id.vars = c("PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP"), 
+				measure.vars = c("Dioxane","PFOS","PFOA", "TCP"), value.name = "concentration", variable.name = "contaminant")
+			View(final_s95th_wide_detects_long)
+
+			# remove rows that have NA in "value", because these were already replaced in the NA replace section. . . currently at 96,470 rows, dropping down to:
+			# final_95th_long <- final_95th_long[!is.na(final_95th_long$value),]
+			# View(final_95th_long)
+
+	# graph boxplot without non-detects and without strontium
+  	ggplot(data = final_s95th_wide_detects_long, mapping = aes(x = variable, y = value)) +
+  	scale_y_log10() +
+    geom_boxplot(alpha = 0) +
+    geom_jitter(alpha = 0.3, color = "tomato") +
+    theme_bw()
+
+    # color the geom_jitter by BF, GAC, or neither
+
+    	final_s95th_wide_detects_long$neither_GAC_or_BF <- ifelse(final_s95th_wide_detects_long$GAC == FALSE & final_s95th_wide_detects_long$Biofiltration == FALSE, "neither", NA)
+    	View(final_s95th_wide_detects_long)
+
+    	# Make new columns for BF and GAC so they're not just TRUE/FALSE
+    		final_s95th_wide_detects_long$BF <- ifelse(final_s95th_wide_detects_long$Biofiltration == TRUE, "BF_true", NA)
+    		final_s95th_wide_detects_long$GAC_true <- ifelse(final_s95th_wide_detects_long$GAC == TRUE, "GAC_true", NA)
+
+    	
+    	final_s95th_wide_detects_long <- melt(final_s95th_wide_detects_long,
+				id.vars = c("PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP", "concentration", "contaminant"), 
+				measure.vars = c("BF", "GAC_true", "neither_GAC_or_BF"), value.name = "treatment_type", variable.name = "GAC_BF_status", na.rm = TRUE)
+			View(final_s95th_wide_detects_long)
+
+			# graph with colors
+		  	ggplot(data = final_s95th_wide_detects_long, mapping = aes(x = contaminant, y = concentration, color = treatment_type)) +
+		  	scale_y_log10() +
+		    #geom_boxplot(color = "black") +
+		   # geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+			geom_jitter(position=position_dodge(0.8), shape = 15) +
+		    theme_bw()
+
+		    
+		    # graph with boxplot and colors
+		    ggplot(data = final_s95th_wide_detects_long, mapping = aes(x = contaminant, y = concentration, color = treatment_type)) +
+		  	scale_y_log10() +
+		    geom_boxplot(color = "black") +
+		   # geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+			geom_jitter(position=position_jitter(0.2)) +
+		    theme_bw()
+
+		    # graph with boxplot and colors, alpha and size adjusted
+		 #    ggplot(data = final_s95th_wide_detects_long_dioxane, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		 #  	scale_y_log10() +
+		 #    geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		 #   # geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+			# geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+		 #    theme_bw() #+
+		    #facet_grid(. ~ contaminant)
+
+
+		    # test out a facet idea
+		    #install.packages("ggh4x")
+		    library(ggh4x)
+
+		    # yes I like this one! Faceted figure
+			ggplot(data = final_s95th_wide_detects_long, mapping = aes("", y = concentration, color = treatment_type)) + 
+				geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) + 
+				scale_y_log10() +
+				geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+				theme_bw() +
+				facet_nested(. ~ contaminant +  treatment_type) +
+				theme(panel.spacing=unit(0,"lines"),
+			        strip.background=element_rect(color="grey30", fill="grey90"),
+			        panel.border=element_rect(color="grey90"),
+			        axis.ticks.x=element_blank(), legend.position = "none") +
+				labs(x="", y = "Log concentration (\u03BCg/L)")
+
+			# split into four figures and add horizontal lines
+				final_s95th_wide_detects_long_dioxane <- filter(final_s95th_wide_detects_long, contaminant == "Dioxane")
+				final_s95th_wide_detects_long_PFOS <- filter(final_s95th_wide_detects_long, contaminant == "PFOS")
+				final_s95th_wide_detects_long_PFOA <- filter(final_s95th_wide_detects_long, contaminant == "PFOA")
+				final_s95th_wide_detects_long_TCP <- filter(final_s95th_wide_detects_long, contaminant == "TCP")
+
+			a <- ggplot(data = final_s95th_wide_detects_long_dioxane, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		  			scale_y_log10() +
+		    		geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		   			# geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+					geom_jitter(position=position_jitter(0.4), s1ze = 3, alpha = 0.5) +
+		    		theme_bw() +
+					labs(x= "Treatment Type", y = "1,4-Dioxane Concentration (\u03BCg/L)") +
+					theme(legend.position = "none") +
+					geom_hline(yintercept = 0.35, color = "red", linetype = 2, size = 1) +
+					geom_hline(yintercept = 35, color = "red", linetype = 2, size = 1) + 
+					annotate(geom = "text", x = 0, y = 0.48, label = expression(10^-6 * "cancer risk "), hjust = 0, vjust = 1) + 
+					annotate(geom = "text", x = 0, y = 48, label = expression(10^-4 * "cancer risk "), hjust = 0, vjust = 1)
+
+					# reference concentration, listed in table of "The Third Unregulated Contaminant Monitoring Rule (UCMR 3):Data Summary, January 2017" For Dioxane, 10^-6 cancer risk is 0.35, while #10^-4 is 35 ug/L
+					
+
+			b <- ggplot(data = final_s95th_wide_detects_long_PFOS, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		  			scale_y_log10() +
+		    		geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		   			# geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+					geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+		    		theme_bw() +
+					labs(x= "Treatment Type", y = "PFOS Concentration (\u03BCg/L)") +
+					theme(legend.position = "none") +
+					#annotate("text", x=-130, y=49, label= "(b)", size = 8) +
+					#geom_hline(yintercept = 0.04, color = "red", linetype = 1, size = 1) + # MRL line (detect cut-off)
+					geom_hline(yintercept = 0.07, color = "red", linetype = 2, size = 1) +# reference concentration
+					annotate(geom = "text", x = 0, y = 0.085, label = "Health Advisory Level", hjust = 0, vjust = 1)
+
+			c <- ggplot(data = final_s95th_wide_detects_long_PFOA, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		  			scale_y_log10() +
+		    		geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		   			# geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+					geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+		    		theme_bw() +
+					labs(x= "Treatment Type", y = "PFOA Concentration (\u03BCg/L)") +
+					theme(legend.position = "none") +
+					#annotate("text", x=-130, y=49, label= "(c)", size = 8) +
+					#geom_hline(yintercept = 0.02, color = "red", linetype = 1, size = 1) + # MRL line (detect cut-off)
+					geom_hline(yintercept = 0.07, color = "red", linetype = 2, size = 1) +# reference concentration
+					annotate(geom = "text", x = 0, y = 0.078, label = "Health Advisory Level", hjust = 0, vjust = 1)
+
+			d <- ggplot(data = final_s95th_wide_detects_long_TCP, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		  			scale_y_log10() +
+		    		geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		   			# geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+					geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+		    		theme_bw() +
+					labs(x= "Treatment Type", y = "TCP Concentration (\u03BCg/L)") +
+					theme(legend.position = "none") +
+					#annotate("text", x=-130, y=49, label= "(d)", size = 8) +
+					#geom_hline(yintercept = 0.0004, color = "red", linetype = 2, size = 1) +# reference concentration
+					#geom_hline(yintercept = 0.03, color = "red", linetype = 1, size = 1) + # MRL line (detect cut-off)
+					geom_hline(yintercept = 0.04, color = "red", linetype = 2, size = 1) +# reference concentration
+					annotate(geom = "text", x = 0, y = 0.046, label = expression(10^-4 * "cancer risk "), hjust = 0, vjust = 1)
+
+
+			regdet_concentrations_by_treatment_combined_jitter_boxplots <- ggarrange(a, b, c, d, nrow = 2, ncol = 2, labels = "auto")
+
+
+			#ggsave(regdet_concentrations_by_treatment_combined_jitter_boxplots, filename = paste("regdet_concentrations_by_treatment_combined_jitter_boxplots_", Sys.Date(), ".jpeg", sep=""), width=10, height=7, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
