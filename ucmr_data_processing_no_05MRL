@@ -1,0 +1,917 @@
+# Andrew Black
+# andrewjblack0@gmail.com
+
+# test change for new branch
+# ctrl-shift-w to close all View tabs
+# ctrl-/ to comment-out a section
+
+# List out packages
+	packages = c("ggplot2",
+						"readxl",
+						 "readr",
+						 "tidyr",
+						 "UpSetR",
+						 "dplyr",
+						 "purrr",
+						 "stringr",
+						 "ComplexUpset",
+						 "apaTables",
+						 "sos",
+						 "imputeTS",
+						 "ggmap",
+						 "readtext",
+						 "expss",
+						 "ggsci",
+						 "tmaptools",
+						 "usmap",
+						 "knitr",
+						 "afex",
+						 "stringr",
+						 "ggthemes",
+						 "scales",
+						 "grid",
+						 "reshape2",
+						 "ggpubr")
+
+
+	# Now load or install&load all
+		package.check <- lapply(
+		  packages,
+		  FUN = function(x) {
+		    if (!require(x, character.only = TRUE)) {
+		      install.packages(x, dependencies = TRUE)
+		      library(x, character.only = TRUE)
+		    }
+		  }
+		)
+
+# Set up colors for the colorblind
+	scale_colour_discrete <- scale_colour_colorblind
+
+# Navigate to the first file and open it
+	setwd("C:/Users/Andrew/Desktop/UCMR")
+
+# Get EPA data combined into one dataframe
+	# Open .txt files provided in UCMR3 zip folder from EPA
+		
+		# UCMR3 All occurrence data
+			UCMR3_allData <- read.table("UCMR3_All.txt", fill=TRUE, header=TRUE, quote="", sep="\t", encoding="UTF-8")
+			#View(UCMR3_allData)
+			unique(UCMR3_allData$State) # Wooooh, got all states and some territories!
+
+			UCMR3_allData <- UCMR3_allData[!with(UCMR3_allData,is.na(MRL)& is.na(AnalyticalResultValue)& is.na(Contaminant)),] # remove rows where MRL is NA AND AnalyticalResultValue is NA, because this is not even a ND, there is no contaminant test reported
+			
+			UCMR3_allData$PWSID_facilityID <- paste(UCMR3_allData$PWSID, UCMR3_allData$FacilityID, sep="")
+
+			length(unique(UCMR3_allData$PWSID_facilityID)) # 22,131 total unique facilities
+
+			UCMR3_allData$PWSID_facilty_water <- paste(UCMR3_allData$PWSID, UCMR3_allData$FacilityWaterType, sep="")
+			#View(UCMR3_allData)
+
+		# UCMR3 disinfectant use data
+			UCMR3_DT <- read.table("UCMR3_DT.txt", fill=TRUE, header=TRUE, quote="", sep="\t", encoding="UTF-8")
+			#View(UCMR3_DT)
+			UCMR3_DT$PWSID_facilityID <- paste(UCMR3_DT$PWSID, UCMR3_DT$FacilityID, sep="")
+			# Remove the columns that are not needed, sample event code and collection date
+			UCMR3_DT <- UCMR3_DT[, c("PWSID_facilityID", "Disinfectant.Type")]
+			# Remove duplicate rows
+			UCMR3_DT <- unique(UCMR3_DT)
+			
+
+			# this means that we must match up the disinfectant data based on BOTH PWSID and FacilityID, because a given PWSID may have multiple facilities under it, and the state-assigned facility ID has been proven not-unique (so, a PWSID from Kansas and Florida may have the same facility number 771, under unique PWSIDs)
+			
+			UCMR3_disinf <- left_join(UCMR3_allData, UCMR3_DT, by = "PWSID_facilityID")
+			#View(UCMR3_disinf)
+
+		# Get a nice list of the column names
+			dput(as.character(names(UCMR3_disinf)))
+
+	# Look at UCMR4 EPA data, get look up values for these PWSIDs treatment info
+		# Open .txt files provided in UCMR3 zip folder from EPA
+		UCMR4_HAA_AddtlDataElem <- read.delim("UCMR4_HAA_AddtlDataElem.txt")
+		#View(UCMR4_HAA_AddtlDataElem)
+
+		# make the column AdditionalDataElement into separate columns with Response below each
+			UCMR4_HAA_AddtlDataElem_wide <- UCMR4_HAA_AddtlDataElem %>%
+					  group_by(AdditionalDataElement) %>%
+					  mutate(row = row_number()) %>%
+					  tidyr::pivot_wider(names_from = AdditionalDataElement, values_from = Response) %>%
+					  select(-row)
+			#View(UCMR4_HAA_AddtlDataElem_wide)
+		UCMR4_HAA_AddtlDataElem_wide$PWSID_facilityID <- paste(UCMR4_HAA_AddtlDataElem_wide$PWSID, UCMR4_HAA_AddtlDataElem_wide$FacilityID, sep="")
+
+
+		# Make a table of treatment info by PWSID
+			UCMR4_HAA_AddtlDataElem_wide_1 <- unique(subset(UCMR4_HAA_AddtlDataElem_wide, select = c("PWSID_facilityID", "TreatmentInformation")))
+			UCMR4_HAA_AddtlDataElem_wide_1 <- na.omit(UCMR4_HAA_AddtlDataElem_wide_1)
+			#View(UCMR4_HAA_AddtlDataElem_wide_1)
+			PWSID_TreatmentInfo <- UCMR4_HAA_AddtlDataElem_wide_1 %>% 
+			    group_by(PWSID_facilityID) %>% 
+			    summarise(Treatment = paste(unique(TreatmentInformation), collapse = ', '))
+			#View(PWSID_TreatmentInfo)
+
+			# see how many of these from original UCMR4 set have biofiltration
+			PWSID_TreatmentInfo_BF <- PWSID_TreatmentInfo
+			PWSID_TreatmentInfo_BF$Biofiltration <- ifelse(is.na(PWSID_TreatmentInfo$Treatment), NA, grepl("BIO", PWSID_TreatmentInfo$Treatment))
+			PWSID_TreatmentInfo_BF <- merge(x = PWSID_TreatmentInfo_BF, y = UCMR4_HAA_AddtlDataElem_wide[ , c("PWSID", "FacilityID", "PWSID_facilityID")], by.x = 'PWSID_facilityID', by.y = 'PWSID_facilityID')
+			# Make it only unique rows
+			PWSID_TreatmentInfo_BF <- unique(PWSID_TreatmentInfo_BF)
+			#View(PWSID_TreatmentInfo_BF) # There are 7,326 unique facilities with treatment info from UCMR4
+
+			# Of these, how many PWSIDs have different BF status within their included facilities? Filter out to just PWSID and Biofiltration and set to unique, then check for duplicate PWSIDs in that column
+			unique_PWSID_BF <- unique(subset(PWSID_TreatmentInfo_BF, select = c("PWSID", "Biofiltration")))
+			#View(unique_PWSID_BF) # 4,418 unique combinations of PWSID and Biofiltration. How many unique PWSIDs then?
+			length(unique(unique_PWSID_BF$PWSID)) # 4,415 so thats only 3 differences. Thats nothing!
+
+			# see how many of these from original UCMR4 set have GAC
+			PWSID_TreatmentInfo_GAC <- PWSID_TreatmentInfo_BF
+			PWSID_TreatmentInfo_GAC$GAC <- ifelse(is.na(PWSID_TreatmentInfo_BF$Treatment), NA, grepl("GAC", PWSID_TreatmentInfo_BF$Treatment))
+			PWSID_TreatmentInfo_GAC <- merge(x = PWSID_TreatmentInfo_GAC, y = UCMR4_HAA_AddtlDataElem_wide[ , c("PWSID", "FacilityID", "PWSID_facilityID")], by.x = 'PWSID_facilityID', by.y = 'PWSID_facilityID')
+			# Make it only unique rows
+			PWSID_TreatmentInfo_GAC <- unique(PWSID_TreatmentInfo_GAC)
+			#View(PWSID_TreatmentInfo_GAC) # There are 7,326 unique facilities with treatment info from UCMR4
+
+			# Of these, how many PWSIDs have different GAC status within their included facilities? Filter out to just PWSID and GAC and set to unique, then check for duplicate PWSIDs in that column
+			unique_PWSID_GAC <- unique(subset(PWSID_TreatmentInfo_GAC, select = c("PWSID.x", "GAC")))
+			#View(unique_PWSID_GAC) # 4,433 unique combinations of PWSID and GAC. How many unique PWSIDs then?
+			length(unique(unique_PWSID_GAC$PWSID)) # 4,415 so thats only 18 differences. Thats not much!
+
+
+			# Okay, combine this info later based on PWSID and see how many NAs. Pick this up again further down in this script...
+			treatment_data <- subset(PWSID_TreatmentInfo_GAC, select = c("PWSID.x", "FacilityID.x", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC"))
+			names(treatment_data)[names(treatment_data)=="PWSID.x"] <- "PWSID"
+			names(treatment_data)[names(treatment_data)=="FacilityID.x"] <- "FacilityID"
+			#View(treatment_data)
+
+
+
+# Merge this new dataframes to original UCMR3 dataframe, first by PWSID_facilityID and count NAs
+		UCMR3_w_treatment_data1 <- left_join(UCMR3_allData, treatment_data, by='PWSID_facilityID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+		#View(UCMR3_w_treatment_data1)
+		sum(is.na(UCMR3_w_treatment_data1$Biofiltration))
+		sum(is.na(UCMR3_w_treatment_data1$GAC))
+		
+
+# Repeat by matching first PWSID then facility ID
+		UCMR3_w_treatment_data2 <- left_join(UCMR3_allData, treatment_data, by= c('PWSID', 'FacilityID')) # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+		#View(UCMR3_w_treatment_data2)
+		sum(is.na(UCMR3_w_treatment_data2$Biofiltration))
+		sum(is.na(UCMR3_w_treatment_data2$GAC))
+
+# Repeat by matching just PWSID
+		UCMR3_w_treatment_data3 <- left_join(UCMR3_allData, treatment_data, by= 'PWSID') # left_join keeps the "by" from the first listed dataframe, and fills in from the next dataframe to match up to PWSID_facilityIDs
+		#View(UCMR3_w_treatment_data3)
+		sum(is.na(UCMR3_w_treatment_data3$Biofiltration))
+		sum(is.na(UCMR3_w_treatment_data3$GAC))
+
+# This gave us 1,044,447 NA's for set 1 and 2, but only 254,102 NA's for set 3. Can we confirm that it is accurate to assign this info by PWSID, not facility ID? Yes, there were only 3 and 18 mismatches for BIO and GAC, respectively. So only 21 PWSIDs had different responses for these two within their included facilities. Lets go with set 3!
+
+		final_data <- UCMR3_w_treatment_data3
+		#View(final_data)
+
+# Add geolocation data to this, by PWSID
+
+		PWSID_latlong <- read_csv("C:/Users/Andrew/Desktop/AJB_personal/USF/Masters_thesis_word/UCMR_3_dioxane/SDWIS_lat_long_toR.csv")
+		final_data_latlong <- dplyr::left_join(final_data, PWSID_latlong, by = "PWSID")
+		#View(final_data_latlong)
+
+		# Count how many are still missing
+		unique_PWSIDs <- unique(subset(final_data_latlong, select = c("PWSID", "LAT", "LONG")))
+		unique_facilities <- unique(subset(final_data_latlong, select = c("PWSID", "FacilityID.x", "LAT", "LONG")))
+		length(unique_PWSIDs$LAT) # 6,201 unique PWSs geolocated
+		sum(is.na(unique_PWSIDs$LAT)) # 783 missing geolocations out of 6,201 PWSIDs
+		length(unique_facilities$LAT) # 22,134 unique facilities geolocated
+		sum(is.na(unique_facilities$LAT)) # 1,231 missing geolocations out of 22,134 facilities
+
+# Find out how many unique facilities included in UCMR3 data report biofiltration, first selecting only the PWSID and then showing only unique ones and counting the ones with and without BIO and the NAs
+		final_data_check_bio <- unique(subset(final_data_latlong, select = c("PWSID", "FacilityID.x", "Biofiltration")))
+		length(final_data_check_bio$PWSID) # 22,156 total unique facilities
+
+		facilities_with_bio <- dplyr::filter(final_data_check_bio, Biofiltration == TRUE)
+		length(facilities_with_bio$Biofiltration) # 405 facilities report biofiltration
+		
+		facilities_wo_bio <- dplyr::filter(final_data_check_bio, Biofiltration == FALSE)
+		length(facilities_wo_bio$Biofiltration) # 15,658 facilities report no biofiltration
+		
+		sum(is.na(final_data_check_bio$Biofiltration)) # 6,093 do not report
+
+
+# Find out how many unique facilities included in UCMR3 data report GAC, first selecting only the PWSID and then showing only unique ones and counting the ones with and without BIO and the NAs
+		final_data_check_GAC <- unique(subset(final_data_latlong, select = c("PWSID", "FacilityID.x", "GAC")))
+		length(final_data_check_GAC$PWSID) # 22,725 total unique facilities
+
+		facilities_with_GAC <- dplyr::filter(final_data_check_GAC, GAC == TRUE)
+		length(facilities_with_GAC$GAC) # 2,007 facilities report GAC
+		
+		facilities_wo_GAC <- dplyr::filter(final_data_check_GAC, GAC == FALSE)
+		length(facilities_wo_GAC$GAC) # 14,625 facilities report no GAC
+		
+		sum(is.na(final_data_check_GAC$GAC)) # 6,093 do not report
+
+# Filter contaminant for 1,4-dioxane, strontium, PFOS, PFOA, and 1,2,3-trichloropropane
+	final_data_regdet <- dplyr::filter(final_data_latlong,
+										Contaminant == "1,4-dioxane" |
+										Contaminant == "PFOS" |
+										Contaminant == "PFOA" |
+										Contaminant == "strontium" |
+										Contaminant == "1,2,3-trichloropropane")
+# Remove duplicate columns and rename some
+		# Get a nice list of the column names
+			#dput(as.character(names(final_data_regdet)))
+	final_data_regdet <- subset(final_data_regdet, select = c("PWSID", "PWSName.x", "Size", "FacilityID.x", "FacilityName","FacilityWaterType", "SamplePointID", "SamplePointName", "SamplePointType", "AssociatedFacilityID", "AssociatedSamplePointID", "CollectionDate", "SampleID", "Contaminant", "MRL", "MethodID", "AnalyticalResultsSign", "AnalyticalResultValue", "SampleEventCode", "MonitoringRequirement", "Region", "State.x", "PWSID_facilityID.x", "PWSID_facilty_water", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP"))
+
+	names(final_data_regdet)[names(final_data_regdet)=="PWSName.x"] <- "PWSName"
+	names(final_data_regdet)[names(final_data_regdet)=="FacilityID.x"] <- "FacilityID"
+	names(final_data_regdet)[names(final_data_regdet)=="State.x"] <- "State"
+	names(final_data_regdet)[names(final_data_regdet)=="PWSID_facilityID.x"] <- "PWSID_facilityID"
+	
+
+	View(final_data_regdet)
+	# remove na values and send to new dataframe
+	final_data_regdet_detects <- final_data_regdet[!is.na(final_data_regdet$AnalyticalResultValue),]
+	View(final_data_regdet_detects)
+
+	final_data_regdet_detects_dioxane <- filter(final_data_regdet_detects, Contaminant == "1,4-Dioxane")
+	final_data_regdet_detects_trichloropropane <-filter(final_data_regdet_detects, Contaminant == "1,2,3-trichloropropane")
+	final_data_regdet_detects_PFOS <- filter(final_data_regdet_detects, Contaminant == "PFOS")
+	final_data_regdet_detects_PFOA <- filter(final_data_regdet_detects, Contaminant == "PFOA")
+
+
+# Take 95th percentile of AnalyticalResultValue for each PWSID_facilityID, and include particular columns
+				
+			# create the 95th percentile function
+				percentile95 <- function (x){
+					quantile(x, probs = 0.95)
+				}
+
+			
+			# create the new data sets
+
+			# dioxane	
+
+				s95th_dioxane <- aggregate(x = final_data_regdet_detects_dioxane$AnalyticalResultValue,     # Specify data column
+				          by = list(final_data_regdet_detects_dioxane$PWSID_facilityID),                          # Specify group indicator
+				          FUN = percentile95)                                            # Specify function (i.e. mean)
+				colnames(s95th_dioxane) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_dioxane")
+				View(s95th_dioxane)
+
+			# PFOS	
+
+				s95th_PFOS <- aggregate(x = final_data_regdet_detects_PFOS$AnalyticalResultValue,     # Specify data column
+				          by = list(final_data_regdet_detects_PFOS$PWSID_facilityID),                          # Specify group indicator
+				          FUN = percentile95)                                            # Specify function (i.e. mean)
+				colnames(s95th_PFOS) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_PFOS")
+				View(s95th_PFOS)
+
+			# PFOA
+
+				s95th_PFOA <- aggregate(x = final_data_regdet_detects_PFOA$AnalyticalResultValue,     # Specify data column
+				          by = list(final_data_regdet_detects_PFOA$PWSID_facilityID),                          # Specify group indicator
+				          FUN = percentile95)                                            # Specify function (i.e. mean)
+				colnames(s95th_PFOA) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_PFOA")
+				View(s95th_PFOA)
+
+			# trichloropropane
+
+				s95th_trichloropropane <- aggregate(x = final_data_regdet_detects_trichloropropane$AnalyticalResultValue,     # Specify data column
+				          by = list(final_data_regdet_detects_trichloropropane$PWSID_facilityID),                          # Specify group indicator
+				          FUN = percentile95)                                            # Specify function (i.e. mean)
+				colnames(s95th_trichloropropane) <- c("PWSID_facilityID", "s95thAnalyticalResultValue_trichloropropane")
+				View(s95th_trichloropropane)
+
+	# Combine each of the above with a copy of final_data_regdet, copying columns over based on PWSID_facilityID listed in each s95th data set
+
+		# First, subset final_data_regdet to just facility data info
+			dput(as.character(names(final_data_regdet)))
+			facility_data_end <- unique(subset(final_data_regdet, select = c("PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP")))
+			View(facility_data_end)
+		# Now, add in each 95th data set as new columns, KEEPING ALL DATA
+			d1 <- merge(x=facility_data_end, y=s95th_dioxane, by="PWSID_facilityID", all=TRUE)
+			d2 <- merge(x=d1, y=s95th_PFOA, by="PWSID_facilityID", all=TRUE)
+			d3 <- merge(x=d2, y=s95th_PFOS, by="PWSID_facilityID", all=TRUE)
+			d4 <- merge(x=d3, y=s95th_strontium, by="PWSID_facilityID", all=TRUE)
+			final_95th_wide <- merge(x=d4, y=s95th_trichloropropane, by="PWSID_facilityID", all=TRUE)
+
+			View(final_95th_wide)
+
+			final_95th_long <- melt(final_95th_wide,
+				id.vars = c("PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP"), 
+				measure.vars = c("s95thAnalyticalResultValue_trichloropropane","s95thAnalyticalResultValue_dioxane","s95thAnalyticalResultValue_PFOS", "s95thAnalyticalResultValue_PFOA"))
+			
+			View(final_95th_long)
+			# remove rows that have NA in "value", because these were already replaced in the NA replace section
+			final_95th_long <- final_95th_long[!is.na(final_95th_long$value),]
+			View(final_95th_long) 
+
+			# change the variables to something more legible on plots
+			as.factor(final_95th_long$variable)
+			final_95th_long$variable_short <- ifelse(final_95th_long$variable == "s95thAnalyticalResultValue_trichloropropane", "Trichloropropane", ifelse(final_95th_long$variable == "s95thAnalyticalResultValue_PFOA", "PFOA", ifelse(final_95th_long$variable == "s95thAnalyticalResultValue_dioxane", "Dioxane", ifelse(final_95th_long$variable == "s95thAnalyticalResultValue_PFOS", "PFOS", NA))))
+			final_95th_long$variable_short <- factor(final_95th_long$variable_short)
+			levels(final_95th_long$variable_short)
+
+			# how many over HAL for:
+				# dioxane
+					final_95th_long_dioxane <- filter(final_95th_long, variable_short == "Dioxane")
+					dioxane_exceeds_10_6 <- sum(final_95th_long_dioxane$value > 0.48)
+					dioxane_exceeds_10_6
+					dioxane_exceeds_10_4 <-sum(final_95th_long_dioxane$value > 48)
+					dioxane_exceeds_10_4
+
+				# PFOS
+					final_95th_long_PFOS <- filter(final_95th_long, variable_short == "PFOS")
+					PFOS_exceeds_HAL <- sum(final_95th_long_PFOS$value > 0.085)
+					PFOS_exceeds_HAL
+
+				# PFOA
+					final_95th_long_PFOA <- filter(final_95th_long, variable_short == "PFOA")
+					PFOA_exceeds_HAL <- sum(final_95th_long_PFOA$value > 0.078)
+					PFOA_exceeds_HAL
+
+				# PFOS_redo_2022_02_15
+					final_95th_long_PFOS <- filter(final_95th_long, variable_short == "PFOS")
+					PFOS_exceeds_HAL_redo <- sum(final_95th_long_PFOS$value > 0.07)
+					PFOS_exceeds_HAL_redo
+
+				# PFOA_redo_2022_02_15
+					final_95th_long_PFOA <- filter(final_95th_long, variable_short == "PFOA")
+					PFOA_exceeds_HAL_redo <- sum(final_95th_long_PFOA$value > 0.07)
+					PFOA_exceeds_HAL_redo
+
+				# TCP
+					final_95th_long_TCP <- filter(final_95th_long, variable_short == "Trichloropropane")
+					TCP_exceeds_10_4 <- sum(final_95th_long_TCP$value > 0.046)
+					TCP_exceeds_10_4
+
+			# How many detects per contaminant? Lets check:
+			ggplot(data = final_95th_long, aes(x = variable_short)) +
+				geom_bar(stat = "count") +
+				geom_text(stat = "count", aes(label=..count..), vjust=-1)
+
+
+# copy has been verified up to here, 10/29/2021
+
+
+
+
+
+# Lets get mapping!
+
+	# Start with final_95th_long, and make PCounty data into a new column called "subregion", and make the entry lowercase entries of PCounty
+		final_95th_long$subregion <- tolower(final_95th_long$PCounty)
+
+	# Subset to get only the data we need to map by subregion (****** combine data per subregion with s95th function****)
+		heatmap_by_county_data <- subset(final_95th_long, select = c("variable", "value", "State", "subregion"))
+		head(heatmap_by_county_data)
+# load map outline data
+	us_counties <- map_data("county")
+	head(us_counties)
+
+
+# biofilter/GAC location data for entire US from all UCMR4 data:
+			treatment_data <- subset(final_data_latlong, select = c("PWSID_facilityID.x", "LAT", "LONG", "Biofiltration", "GAC"))
+			treatment_data <- unique(treatment_data)
+			View(treatment_data) # 22,736 facilities
+			treatment_data_BF <- dplyr::filter(treatment_data, Biofiltration == TRUE) # 405 facilities in the US with BF
+			treatment_data_BF <- unique(treatment_data_BF)
+			View(treatment_data_BF)
+			treatment_data_GAC <- dplyr::filter(treatment_data, GAC == TRUE)
+			treatment_data_GAC <- unique(treatment_data_GAC)
+			View(treatment_data_GAC) # 2,007 facilities with GAC in the US
+
+			# just with unique coordinates, for mapping purposes:
+			treatment_data_to_map_BF <- unique(subset(treatment_data_BF, select = c("LAT", "LONG", "Biofiltration")))
+			View(treatment_data_to_map_BF) # 72 coordinates with known BF
+			treatment_data_to_map_GAC <- unique(subset(treatment_data_GAC, select = c("LAT", "LONG", "GAC")))
+			treatment_data_to_map_GAC <- filter(treatment_data_to_map_GAC, LONG > -150)
+			View(treatment_data_to_map_GAC) # 239 coordinates with known GAC
+
+# combine this with the data we want to show	
+	
+	# Dioxane
+		dioxane_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_dioxane")
+		dioxane_map_data <- aggregate(dioxane_map_data$value, by = list(dioxane_map_data$subregion), FUN = mean)
+		dioxane_map_data$subregion <- dioxane_map_data$Group.1
+		dioxane_map_data$value <- dioxane_map_data$x
+		dioxane_map_data <- left_join(us_counties, dioxane_map_data, by= "subregion")
+		dioxane_map_data$exceeds_0.5MRL <- dioxane_map_data$value > 0.035 # MRL for dioxane
+		dioxane_map_data$exceeds_0.5MRL_true <- ifelse(dioxane_map_data$exceeds_0.5MRL == TRUE, TRUE, NA)
+		dioxane_map_data$value_that_exceeded_MRL <- ifelse(dioxane_map_data$value > 0.035, dioxane_map_data$value, NA) # if value exceeds half the MRL for a county, then a value for that county was reported above the MRL, so dioxane was found in that county
+		dioxane_map_data$exceeds_limit <- dioxane_map_data$value > 1 # limit for dioxane is 1 ug/L, based on NY MCL
+		View(dioxane_map_data)
+
+	# PFOS
+		PFOS_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_PFOS")
+		PFOS_map_data <- aggregate(PFOS_map_data$value, by = list(PFOS_map_data$subregion), FUN = mean)
+		PFOS_map_data$subregion <- PFOS_map_data$Group.1
+		PFOS_map_data$value <- PFOS_map_data$x
+		PFOS_map_data <- left_join(us_counties, PFOS_map_data, by= "subregion")
+		PFOS_map_data$exceeds_0.5MRL <- PFOS_map_data$value > 0.02 # MRL for PFOS
+		PFOS_map_data$exceeds_0.5MRL_true <- ifelse(PFOS_map_data$exceeds_0.5MRL == TRUE, TRUE, NA)
+		PFOS_map_data$value_that_exceeded_MRL <- ifelse(PFOS_map_data$value > 0.02, PFOS_map_data$value, NA) # if value exceeds half the MRL for a county, then a value for that county was reported above the MRL, so PFOS was found in that county
+		PFOS_map_data$exceeds_limit <- PFOS_map_data$value > 0.010 # The current lowest, NY advisory/standard
+		View(PFOS_map_data)
+
+	# PFOA
+		PFOA_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_PFOA")
+		PFOA_map_data <- aggregate(PFOA_map_data$value, by = list(PFOA_map_data$subregion), FUN = mean)
+		PFOA_map_data$subregion <- PFOA_map_data$Group.1
+		PFOA_map_data$value <- PFOA_map_data$x
+		PFOA_map_data <- left_join(us_counties, PFOA_map_data, by= "subregion")
+		PFOA_map_data$exceeds_0.5MRL <- PFOA_map_data$value > 0.01 # MRL for PFOA
+		PFOA_map_data$exceeds_0.5MRL_true <- ifelse(PFOA_map_data$exceeds_0.5MRL == TRUE, TRUE, NA)
+		PFOA_map_data$value_that_exceeded_MRL <- ifelse(PFOA_map_data$value > 0.01, PFOA_map_data$value, NA) # if value exceeds half the MRL for a county, then a value for that county was reported above the MRL, so PFOA was found in that county
+		PFOA_map_data$exceeds_limit <- PFOA_map_data$value > 0.008 # Current lowest, Michigan's new enforceable
+		View(PFOA_map_data)
+
+	# trichloropropane
+		trichloropropane_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_trichloropropane")
+		trichloropropane_map_data <- aggregate(trichloropropane_map_data$value, by = list(trichloropropane_map_data$subregion), FUN = mean)
+		trichloropropane_map_data$subregion <- trichloropropane_map_data$Group.1
+		trichloropropane_map_data$value <- trichloropropane_map_data$x
+		trichloropropane_map_data <- left_join(us_counties, trichloropropane_map_data, by= "subregion")
+		trichloropropane_map_data$exceeds_0.5MRL <- trichloropropane_map_data$value > 0.015 # MRL for trichloropropane
+		trichloropropane_map_data$exceeds_0.5MRL_true <- ifelse(trichloropropane_map_data$exceeds_0.5MRL == TRUE, TRUE, NA)
+		trichloropropane_map_data$value_that_exceeded_MRL <- ifelse(trichloropropane_map_data$value > 0.015, trichloropropane_map_data$value, NA) # if value exceeds half the MRL for a county, then a value for that county was reported above the MRL, so trichloropropane was found in that county
+		trichloropropane_map_data$exceeds_limit <- trichloropropane_map_data$value > 0.00003 # 3 x 10^-5 ug/L in Texas
+		View(trichloropropane_map_data)
+
+	# strontium
+		strontium_map_data <- dplyr::filter(heatmap_by_county_data, variable == "s95thAnalyticalResultValue_strontium")
+		strontium_map_data <- aggregate(strontium_map_data$value, by = list(strontium_map_data$subregion), FUN = mean)
+		strontium_map_data$subregion <- strontium_map_data$Group.1
+		strontium_map_data$value <- strontium_map_data$x
+		strontium_map_data <- left_join(us_counties, strontium_map_data, by= "subregion")
+		dioxane_map_data$exceeds_limit <- dioxane_map_data$value > 1 # limit for dioxane is 1 ug/L, based on NY MCL
+		View(strontium_map_data)
+
+# map it
+
+	# heatmap of dioxane with biofilter locations shown
+
+		ggplot(dioxane_map_data, aes(x=long,y=lat,group=group, fill=exceeds_0.5MRL_true)) + # fill=value_that_exceeded_MRL if you want to show a gradient of the concentrations
+			geom_polygon(color = "gray90", size = 0.1) +
+			coord_map(projection = "albers", lat0 = 45, lat1 = 55)  +
+			#scale_fill_continuous(type = "viridis") +   include this if showing gradient of concentrations
+	  		theme(legend.position="bottom",
+		        axis.line=element_blank(),
+		        axis.text=element_blank(),
+		        axis.ticks=element_blank(),
+		        axis.title=element_blank(),
+		        panel.background=element_blank(),
+		        panel.border=element_blank(),
+		        panel.grid=element_blank())
+	  	
+
+	  colors2 <- rep(c("blue4", "green", "orange"), length.out = groups)
+
+		dioxane_detects_w_BF_GAC <- ggplot(data = dioxane_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "gray90", size = 0.1)  +
+							 		scale_fill_manual(values = colors2) +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+							  		theme(legend.position="bottom",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "red", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "yellow", size = 3, aes(x = LONG, y = LAT))
+			dioxane_detects_w_BF_GAC
+				#ggsave(dioxane_detects_w_BF_GAC, filename = paste("dioxane_detects_w_BF_GAC_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
+
+		dioxane_detects_w_BF_GAC2 <- ggplot(data = dioxane_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "grey30", size = 0.1)  +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+									scale_fill_manual(values = colors2, na.value = "white") +
+									annotate("text", x=-130, y=49, label= "(a)", size = 8) +
+							  		theme(legend.position="none",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		theme(plot.margin = unit(c(-4,-4,-4,-4), "cm")) + # this crops the output figure
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "#D55E00", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "#F0E442", size = 3, aes(x = LONG, y = LAT))
+			dioxane_detects_w_BF_GAC2
+				#ggsave(dioxane_detects_w_BF_GAC2, filename = paste("dioxane_detects_w_BF_GAC2_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
+
+				dioxane_detects_w_BF_GAC3 <- ggplot(data = dioxane_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "grey30", size = 0.1)  +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+									scale_fill_manual(values = colors2, na.value = "white") +
+									#annotate("text", x=-130, y=49, label= "(a)", size = 8) +
+							  		theme(legend.position="bottom",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		theme(plot.margin = unit(c(-4,-4,-4,-4), "cm")) + # this crops the output figure
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "#D55E00", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "#F0E442", size = 3, aes(x = LONG, y = LAT))
+			dioxane_detects_w_BF_GAC3
+
+	# heatmap of PFOS detects with BF and GAC
+			PFOS_detects_w_BF_GAC <- ggplot(data = PFOS_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "grey30", size = 0.1)  +
+							 		scale_fill_manual(values = colors2, na.value = "white") +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+									annotate("text", x=-130, y=49, label= "(b)", size = 8) +
+							  		theme(legend.position="none",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		theme(plot.margin = unit(c(-4,-4,-4,-4), "cm")) + # this crops the output figure
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "#D55E00", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "#F0E442", size = 3, aes(x = LONG, y = LAT))
+			PFOS_detects_w_BF_GAC
+				#ggsave(PFOS_detects_w_BF_GAC, filename = paste("PFOS_detects_w_BF_GAC_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
+
+	# heatmap of PFOA detects with BF and GAC
+			PFOA_detects_w_BF_GAC <- ggplot(data = PFOA_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "grey30", size = 0.1)  +
+							 		scale_fill_manual(values = colors2, na.value = "white") +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+									annotate("text", x=-130, y=49, label= "(c)", size = 8) +
+							  		theme(legend.position="none",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		theme(plot.margin = unit(c(-4,-4,-4,-4), "cm")) + # this crops the output figure
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "#D55E00", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "#F0E442", size = 3, aes(x = LONG, y = LAT))
+			PFOA_detects_w_BF_GAC
+				#ggsave(PFOA_detects_w_BF_GAC, filename = paste("PFOA_detects_w_BF_GAC_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
+
+	# heatmap of trichloropropane detects with BF and GAC
+			trichloropropane_detects_w_BF_GAC <- ggplot(data = trichloropropane_map_data) +
+							  		geom_polygon(aes(x = long,y = lat, group = group, fill=exceeds_0.5MRL_true), color = "grey30", size = 0.1)  +
+							 		scale_fill_manual(values = colors2, na.value = "white") +
+									coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+									annotate("text", x=-130, y=49, label= "(d)", size = 8) +
+							  		theme(legend.position="none",
+								        axis.line=element_blank(),
+								        axis.text=element_blank(),
+								        axis.ticks=element_blank(),
+								        axis.title=element_blank(),
+								        panel.background=element_blank(),
+								        panel.border=element_blank(),
+								        panel.grid=element_blank())+
+							  		theme(plot.margin = unit(c(-4,-4,-4,-4), "cm")) + # this crops the output figure
+							  		geom_point(data = treatment_data_to_map_GAC, shape = 24, colour = "black", fill = "#D55E00", size = 3, aes(x = LONG, y = LAT))+
+							  		geom_point(data = treatment_data_to_map_BF, shape = 21, colour = "black", fill = "#F0E442", size = 3, aes(x = LONG, y = LAT))
+			trichloropropane_detects_w_BF_GAC
+				#ggsave(trichloropropane_detects_w_BF_GAC, filename = paste("trichloropropane_detects_w_BF_GAC_", Sys.Date(), ".jpeg", sep=""), width=8, height=5, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
+
+
+	# Multiple plot function
+
+			# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+			# - cols:   Number of columns in layout
+			# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+			#
+			# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+			# then plot 1 will go in the upper left, 2 will go in the upper right, and
+			# 3 will go all the way across the bottom.
+			#
+			multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+			  require(grid)
+
+			  # Make a list from the ... arguments and plotlist
+			  plots <- c(list(...), plotlist)
+
+			  numPlots = length(plots)
+
+			  # If layout is NULL, then use 'cols' to determine layout
+			  if (is.null(layout)) {
+			    # Make the panel
+			    # ncol: Number of columns of plots
+			    # nrow: Number of rows needed, calculated from # of cols
+			    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+			                    ncol = cols, nrow = ceiling(numPlots/cols))
+			  }
+
+			 if (numPlots==1) {
+			    print(plots[[1]])
+
+			  } else {
+			    # Set up the page
+			    grid.newpage()
+			    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+			    # Make each plot, in the correct location
+			    for (i in 1:numPlots) {
+			      # Get the i,j matrix positions of the regions that contain this subplot
+			      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+			      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+			                                      layout.pos.col = matchidx$col))
+			    }
+			  }
+			}
+
+	# exceeds MRL
+
+	multiplot(dioxane_detects_w_BF_GAC2, PFOS_detects_w_BF_GAC, cols=1)
+
+
+	multiplot(PFOA_detects_w_BF_GAC, trichloropropane_detects_w_BF_GAC, cols=1)
+
+		
+	p1 <-	ggplot(dioxane_map_data, aes(x=long,y=lat,group=group, fill=exceeds_MRL)) +
+			  geom_polygon(color = "gray90", size = 0.1) +
+			  #coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+			  coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+			  theme(legend.position="bottom",
+			        axis.line=element_blank(),
+			        axis.text=element_blank(),
+			        axis.ticks=element_blank(),
+			        axis.title=element_blank(),
+			        panel.background=element_blank(),
+			        panel.border=element_blank(),
+			        panel.grid=element_blank()) +
+			  labs(title="Dioxane")
+
+	p2 <-	ggplot(PFOA_map_data, aes(x=long,y=lat,group=group, fill=exceeds_MRL)) +
+			  geom_polygon(color = "gray90", size = 0.1) +
+			  #coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+			  coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+			  theme(legend.position="bottom",
+			        axis.line=element_blank(),
+			        axis.text=element_blank(),
+			        axis.ticks=element_blank(),
+			        axis.title=element_blank(),
+			        panel.background=element_blank(),
+			        panel.border=element_blank(),
+			        panel.grid=element_blank()) +
+			  labs(title="PFOA")
+
+	p3 <-	ggplot(PFOS_map_data, aes(x=long,y=lat,group=group, fill=exceeds_MRL)) +
+			  geom_polygon(color = "gray90", size = 0.1) +
+			  #coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+			  coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+			  theme(legend.position="bottom",
+			        axis.line=element_blank(),
+			        axis.text=element_blank(),
+			        axis.ticks=element_blank(),
+			        axis.title=element_blank(),
+			        panel.background=element_blank(),
+			        panel.border=element_blank(),
+			        panel.grid=element_blank()) +
+			  labs(title="PFOS")
+
+	p4 <-	ggplot(trichloropropane_map_data, aes(x=long,y=lat,group=group, fill=exceeds_MRL)) +
+			  geom_polygon(color = "gray90", size = 0.1) +
+			  #coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+			  coord_map(projection = "albers", lat0 = 45, lat1 = 55) +
+			  theme(legend.position="bottom",
+			        axis.line=element_blank(),
+			        axis.text=element_blank(),
+			        axis.ticks=element_blank(),
+			        axis.title=element_blank(),
+			        panel.background=element_blank(),
+			        panel.border=element_blank(),
+			        panel.grid=element_blank()) +
+			  labs(title="TCP")
+
+	
+	#multiplot(p1, p2, p3, p4, cols=2)
+
+	p1
+	p2
+	p3
+	p4
+
+
+# Boxplots of concentrations
+
+ggplot(data = final_95th_long, mapping = aes(x = variable, y = value)) +
+    geom_boxplot(alpha = 0) +
+    geom_jitter(alpha = 0.3, color = "tomato")
+
+
+  # remove strontium
+  final_95th_long_rem_strontium <- dplyr::filter(final_95th_long,
+										variable == "s95thAnalyticalResultValue_dioxane" |
+										variable == "s95thAnalyticalResultValue_trichloropropane" |
+										variable == "s95thAnalyticalResultValue_PFOA" |
+										variable == "s95thAnalyticalResultValue_PFOS")
+  View(final_95th_long_rem_strontium)
+  	
+  # remove non-detects and show log scale for value
+  	final_s95th_wide_detects <- final_95th_wide
+  	final_s95th_wide_detects$Dioxane <- ifelse(final_s95th_wide_detects$s95thAnalyticalResultValue_dioxane > 0.07, final_s95th_wide_detects$s95thAnalyticalResultValue_dioxane, NA)
+  	final_s95th_wide_detects$PFOS <- ifelse(final_s95th_wide_detects$s95thAnalyticalResultValue_PFOS > 0.04, final_s95th_wide_detects$s95thAnalyticalResultValue_PFOS, NA)
+  	final_s95th_wide_detects$PFOA <- ifelse(final_s95th_wide_detects$s95thAnalyticalResultValue_PFOA > 0.02, final_s95th_wide_detects$s95thAnalyticalResultValue_PFOA, NA)
+  	final_s95th_wide_detects$TCP <- ifelse(final_s95th_wide_detects$s95thAnalyticalResultValue_trichloropropane > 0.03, final_s95th_wide_detects$s95thAnalyticalResultValue_trichloropropane, NA)
+
+
+  		# format long for plotting
+  			final_s95th_wide_detects_long <- melt(final_s95th_wide_detects,
+				id.vars = c("PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP"), 
+				measure.vars = c("Dioxane","PFOS","PFOA", "TCP"), value.name = "concentration", variable.name = "contaminant")
+			View(final_s95th_wide_detects_long)
+
+			# remove rows that have NA in "concentration"
+			final_s95th_wide_detects_long_no_NA <- final_s95th_wide_detects_long[!is.na(final_s95th_wide_detects_long$concentration),]
+			View(final_s95th_wide_detects_long_no_NA)
+
+
+
+			
+
+	# graph boxplot without non-detects and without strontium
+  	ggplot(data = final_s95th_wide_detects_long, mapping = aes(x = variable, y = value)) +
+  	scale_y_log10() +
+    geom_boxplot(alpha = 0) +
+    geom_jitter(alpha = 0.3, color = "tomato") +
+    theme_bw()
+
+    # color the geom_jitter by BF, GAC, or neither
+
+    	final_s95th_wide_detects_long$neither_GAC_or_BF <- ifelse(final_s95th_wide_detects_long$GAC == FALSE & final_s95th_wide_detects_long$Biofiltration == FALSE, "neither", NA)
+    	View(final_s95th_wide_detects_long)
+
+    	# Make new columns for BF and GAC so they're not just TRUE/FALSE
+    		final_s95th_wide_detects_long$BF <- ifelse(final_s95th_wide_detects_long$Biofiltration == TRUE, "BF_true", NA)
+    		final_s95th_wide_detects_long$GAC_true <- ifelse(final_s95th_wide_detects_long$GAC == TRUE, "GAC_true", NA)
+
+    	
+    	final_s95th_wide_detects_long <- melt(final_s95th_wide_detects_long,
+				id.vars = c("PWSID", "PWSName", "Size", "FacilityID", "FacilityName", "FacilityWaterType", "Region", "State", "PWSID_facilityID", "Treatment", "Biofiltration", "GAC", "EPA_Region", "Geography_type", "PCounty", "LAT", "LONG", "GEOLOCATED", "Status_id", "PWSType", "GwSw", "PSource", "Owner", "SizeCat5_pt", "SizeCat11_pt", "RetPopSrvd", "PWSSvcConn", "GrantEligible", "Contact", "ContactOrgName", "ContactPhone", "ContactAddress1", "ContactAddress2", "ContactCity", "ContactState", "ContactZIP", "concentration", "contaminant"), 
+				measure.vars = c("BF", "GAC_true", "neither_GAC_or_BF"), value.name = "treatment_type", variable.name = "GAC_BF_status", na.rm = TRUE)
+			View(final_s95th_wide_detects_long)
+
+			# graph with colors
+		  	ggplot(data = final_s95th_wide_detects_long, mapping = aes(x = contaminant, y = concentration, color = treatment_type)) +
+		  	scale_y_log10() +
+		    #geom_boxplot(color = "black") +
+		   # geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+			geom_jitter(position=position_dodge(0.8), shape = 15) +
+		    theme_bw()
+
+		    
+		    # graph with boxplot and colors
+		    ggplot(data = final_s95th_wide_detects_long, mapping = aes(x = contaminant, y = concentration, color = treatment_type)) +
+		  	scale_y_log10() +
+		    geom_boxplot(color = "black") +
+		   # geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+			geom_jitter(position=position_jitter(0.2)) +
+		    theme_bw()
+
+		    # graph with boxplot and colors, alpha and size adjusted
+		 #    ggplot(data = final_s95th_wide_detects_long_dioxane, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		 #  	scale_y_log10() +
+		 #    geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		 #   # geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+			# geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+		 #    theme_bw() #+
+		    #facet_grid(. ~ contaminant)
+
+
+		    # test out a facet idea
+		    #install.packages("ggh4x")
+		    library(ggh4x)
+
+		    # yes I like this one! Faceted figure
+			ggplot(data = final_s95th_wide_detects_long, mapping = aes("", y = concentration, color = treatment_type)) + 
+				geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) + 
+				scale_y_log10() +
+				geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+				theme_bw() +
+				facet_nested(. ~ contaminant +  treatment_type) +
+				theme(panel.spacing=unit(0,"lines"),
+			        strip.background=element_rect(color="grey30", fill="grey90"),
+			        panel.border=element_rect(color="grey90"),
+			        axis.ticks.x=element_blank(), legend.position = "none") +
+				labs(x="", y = "Log concentration (\u03BCg/L)")
+
+			# split into four figures and add horizontal lines
+				final_s95th_wide_detects_long_dioxane <- filter(final_s95th_wide_detects_long, contaminant == "Dioxane")
+				final_s95th_wide_detects_long_PFOS <- filter(final_s95th_wide_detects_long, contaminant == "PFOS")
+				final_s95th_wide_detects_long_PFOA <- filter(final_s95th_wide_detects_long, contaminant == "PFOA")
+				final_s95th_wide_detects_long_TCP <- filter(final_s95th_wide_detects_long, contaminant == "TCP")
+
+			a <- ggplot(data = final_s95th_wide_detects_long_dioxane, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		  			scale_y_log10() +
+		    		geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		   			# geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+					geom_jitter(position=position_jitter(0.4), s1ze = 3, alpha = 0.5) +
+		    		theme_bw() +
+					labs(x= "Treatment Type", y = "1,4-Dioxane Concentration (\u03BCg/L)") +
+					theme(legend.position = "none") +
+					geom_hline(yintercept = 0.35, color = "red", linetype = 2, size = 1) +
+					geom_hline(yintercept = 35, color = "red", linetype = 2, size = 1) + 
+					annotate(geom = "text", x = 0, y = 0.48, label = expression(10^-6 * "cancer risk "), hjust = 0, vjust = 1) + 
+					annotate(geom = "text", x = 0, y = 48, label = expression(10^-4 * "cancer risk "), hjust = 0, vjust = 1)
+
+					# reference concentration, listed in table of "The Third Unregulated Contaminant Monitoring Rule (UCMR 3):Data Summary, January 2017" For Dioxane, 10^-6 cancer risk is 0.35, while #10^-4 is 35 ug/L
+					
+
+			b <- ggplot(data = final_s95th_wide_detects_long_PFOS, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		  			scale_y_log10() +
+		    		geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		   			# geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+					geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+		    		theme_bw() +
+					labs(x= "Treatment Type", y = "PFOS Concentration (\u03BCg/L)") +
+					theme(legend.position = "none") +
+					#annotate("text", x=-130, y=49, label= "(b)", size = 8) +
+					#geom_hline(yintercept = 0.04, color = "red", linetype = 1, size = 1) + # MRL line (detect cut-off)
+					geom_hline(yintercept = 0.07, color = "red", linetype = 2, size = 1) +# reference concentration
+					annotate(geom = "text", x = 0, y = 0.085, label = "Health Advisory Level", hjust = 0, vjust = 1)
+
+			c <- ggplot(data = final_s95th_wide_detects_long_PFOA, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		  			scale_y_log10() +
+		    		geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		   			# geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+					geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+		    		theme_bw() +
+					labs(x= "Treatment Type", y = "PFOA Concentration (\u03BCg/L)") +
+					theme(legend.position = "none") +
+					#annotate("text", x=-130, y=49, label= "(c)", size = 8) +
+					#geom_hline(yintercept = 0.02, color = "red", linetype = 1, size = 1) + # MRL line (detect cut-off)
+					geom_hline(yintercept = 0.07, color = "red", linetype = 2, size = 1) +# reference concentration
+					annotate(geom = "text", x = 0, y = 0.078, label = "Health Advisory Level", hjust = 0, vjust = 1)
+
+			d <- ggplot(data = final_s95th_wide_detects_long_TCP, mapping = aes(y = concentration, x = treatment_type, color = treatment_type)) +
+		  			scale_y_log10() +
+		    		geom_boxplot(color = "black", width=0.7, position=position_dodge(0.7)) +
+		   			# geom_jitter(aes(x = c("Dioxane","PFOS","PFOA", "TCP"), y = concentration), alpha = 0.3, color = ) +
+					geom_jitter(position=position_jitter(0.4), size = 3, alpha = 0.5) +
+		    		theme_bw() +
+					labs(x= "Treatment Type", y = "TCP Concentration (\u03BCg/L)") +
+					theme(legend.position = "none") +
+					#annotate("text", x=-130, y=49, label= "(d)", size = 8) +
+					#geom_hline(yintercept = 0.0004, color = "red", linetype = 2, size = 1) +# reference concentration
+					#geom_hline(yintercept = 0.03, color = "red", linetype = 1, size = 1) + # MRL line (detect cut-off)
+					geom_hline(yintercept = 0.04, color = "red", linetype = 2, size = 1) +# reference concentration
+					annotate(geom = "text", x = 0, y = 0.046, label = expression(10^-4 * "cancer risk "), hjust = 0, vjust = 1)
+
+
+			regdet_concentrations_by_treatment_combined_jitter_boxplots <- ggarrange(a, b, c, d, nrow = 2, ncol = 2, labels = "auto")
+
+
+			#ggsave(regdet_concentrations_by_treatment_combined_jitter_boxplots, filename = paste("regdet_concentrations_by_treatment_combined_jitter_boxplots_", Sys.Date(), ".jpeg", sep=""), width=10, height=7, units="in", path = "C:/Users/Andrew/Box/AndrewUSF/USF/A_General_Research/Manuscripts/RegDet4_UCMR3/Figures")
+
+
+			# Show the crazy differences in health advisories, MRLs, and MCLs
+
+			limit_id <- c("Max reported by UCMR", "MRL", "HAL", "10^-6 cancer risk", "10^-4 cancer risk", "Current lowest standard")
+			dioxane_limits <- c(32, 0.07, NA, 0.35, 35, 1) # verify max reported
+			PFOS_limits <- c(2, 0.04, 0.07, NA, NA, 0.0051)
+			PFOA_limits <- c(0.3, 0.02, 0.07, NA, NA, 0.002)
+			TCP_limits <- c(0.4, 0.03, NA, 0.0004, 0.04, NA)
+
+			limits_data <- data.frame(dioxane_limit_id, dioxane_limits)
+
+
+			#a2 <- 
+			ggplot(data = dioxane_limits_data, mapping = aes(x = dioxane_limit_id,y = dioxane_limits, group = dioxane_limit_id)) +
+					geom_bar(stat = "identity")
+
+					geom_hline(yintercept = 0.35, color = "red", linetype = 2, size = 1) +
+					geom_hline(yintercept = 35, color = "red", linetype = 2, size = 1) + 
+					annotate(geom = "text", x = 0, y = 0.48, label = expression(10^-6 * "cancer risk "), hjust = 0, vjust = 1) + 
+					annotate(geom = "text", x = 0, y = 48, label = expression(10^-4 * "cancer risk "), hjust = 0, vjust = 1)
+
+			b2 <- ggplot(
+					geom_hline(yintercept = 0.07, color = "red", linetype = 2, size = 1) +# reference concentration
+					annotate(geom = "text", x = 0, y = 0.085, label = "Health Advisory Level", hjust = 0, vjust = 1)
+
+			c2 <- ggplot(
+					geom_hline(yintercept = 0.07, color = "red", linetype = 2, size = 1) +# reference concentration
+					annotate(geom = "text", x = 0, y = 0.078, label = "Health Advisory Level", hjust = 0, vjust = 1)
+
+			d2 <- ggplot(
+					geom_hline(yintercept = 0.04, color = "red", linetype = 2, size = 1) +# reference concentration
+					annotate(geom = "text", x = 0, y = 0.046, label = expression(10^-4 * "cancer risk "), hjust = 0, vjust = 1)
+
+
+			regdet_limits <- ggarrange(a2, b2, c2, d2, nrow = 2, ncol = 2, labels = "auto")
+
+
+# Figure out how many facilities with detections report BF or GAC
+
+	detections_GAC_BF <- subset(final_data_regdet_detects, select = c("PWSID_facilityID", "Biofiltration", "GAC", "Contaminant"))
+	detections_GAC_BF <- filter(detections_GAC_BF, Contaminant != "strontium")
+	detections_GAC_BF <- unique(detections_GAC_BF)
+	View(detections_GAC_BF)
+
+	length(which(detections_GAC_BF$GAC == TRUE)) # 305 report GAC
+	length(which(detections_GAC_BF$Biofiltration == TRUE)) # 57 report BF
